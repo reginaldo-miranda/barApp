@@ -14,9 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { productService, saleService } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import ProductSelector from '../src/components/ProductSelector';
 
 export default function SaleScreen() {
-  const { tipo, mesaId, vendaId } = useLocalSearchParams();
+  const { tipo, mesaId, vendaId, viewMode } = useLocalSearchParams();
   const { user } = useAuth();
   
   const [products, setProducts] = useState([]);
@@ -27,6 +28,9 @@ export default function SaleScreen() {
   const [selectedCategory, setSelectedCategory] = useState('todos');
   const [modalVisible, setModalVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('dinheiro');
+  const [productSelectorVisible, setProductSelectorVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isViewMode, setIsViewMode] = useState(false);
 
   const categories = [
     { key: 'todos', label: 'Todos' },
@@ -44,11 +48,18 @@ export default function SaleScreen() {
   ];
 
   useEffect(() => {
-    loadProducts();
-    if (vendaId) {
-      loadSale();
+    // Verificar se estamos em modo de visualização (vindo do botão 'Ver Vendas')
+    if (viewMode === 'view' || (mesaId && !vendaId)) {
+      setIsViewMode(true);
+      loadMesaSale();
     } else {
-      createNewSale();
+      setIsViewMode(false);
+      loadProducts();
+      if (vendaId) {
+        loadSale();
+      } else {
+        createNewSale();
+      }
     }
   }, []);
 
@@ -75,6 +86,25 @@ export default function SaleScreen() {
     }
   };
 
+  const loadMesaSale = async () => {
+    try {
+      const response = await saleService.getByMesa(mesaId);
+      if (response.data && response.data.length > 0) {
+        // Pega a venda ativa da mesa
+        const activeSale = response.data.find(sale => sale.status === 'aberta') || response.data[0];
+        setSale(activeSale);
+        setCart(activeSale.itens || []);
+      } else {
+        // Se não há venda ativa, cria uma nova
+        createNewSale();
+      }
+    } catch (error) {
+      console.error('Erro ao carregar venda da mesa:', error);
+      // Se der erro, cria uma nova venda
+      createNewSale();
+    }
+  };
+
   const createNewSale = async () => {
     try {
       const saleData = {
@@ -95,7 +125,7 @@ export default function SaleScreen() {
     }
   };
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, quantity = 1) => {
     if (!sale) return;
 
     try {
@@ -103,7 +133,7 @@ export default function SaleScreen() {
       
       if (existingItem) {
         // Atualizar quantidade
-        const newQuantity = existingItem.quantidade + 1;
+        const newQuantity = existingItem.quantidade + quantity;
         await saleService.updateItem(sale._id, existingItem._id, {
           quantidade: newQuantity,
           subtotal: newQuantity * product.precoVenda
@@ -113,9 +143,9 @@ export default function SaleScreen() {
         await saleService.addItem(sale._id, {
           produto: product._id,
           nomeProduto: product.nome,
-          quantidade: 1,
+          quantidade: quantity,
           precoUnitario: product.precoVenda,
-          subtotal: product.precoVenda
+          subtotal: product.precoVenda * quantity
         });
       }
       
@@ -124,6 +154,22 @@ export default function SaleScreen() {
       console.error('Erro ao adicionar item:', error);
       Alert.alert('Erro', 'Não foi possível adicionar o item');
     }
+  };
+
+  const openProductSelector = (product) => {
+    setSelectedProduct(product);
+    setProductSelectorVisible(true);
+  };
+
+  const handleProductSelect = async (product, quantity) => {
+    await addToCart(product, quantity);
+    setProductSelectorVisible(false);
+    setSelectedProduct(null);
+  };
+
+  const handleCloseProductSelector = () => {
+    setProductSelectorVisible(false);
+    setSelectedProduct(null);
   };
 
   const removeFromCart = async (item) => {
@@ -177,7 +223,7 @@ export default function SaleScreen() {
   const total = cart.reduce((sum, item) => sum + item.subtotal, 0);
 
   const renderProduct = ({ item }) => (
-    <TouchableOpacity style={styles.productCard} onPress={() => addToCart(item)}>
+    <TouchableOpacity style={styles.productCard} onPress={() => openProductSelector(item)}>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.nome}</Text>
         <Text style={styles.productDescription}>{item.descricao}</Text>
@@ -185,7 +231,7 @@ export default function SaleScreen() {
           R$ {item.precoVenda.toFixed(2)}
         </Text>
       </View>
-      <TouchableOpacity style={styles.addButton} onPress={() => addToCart(item)}>
+      <TouchableOpacity style={styles.addButton} onPress={() => openProductSelector(item)}>
         <Ionicons name="add" size={20} color="#fff" />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -224,54 +270,61 @@ export default function SaleScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {tipo === 'mesa' ? `Mesa ${sale?.mesa?.numero}` : 'Venda Balcão'}
+          {isViewMode ? `Produtos da Mesa ${sale?.mesa?.numero || mesaId}` : 
+           (tipo === 'mesa' ? `Mesa ${sale?.mesa?.numero}` : 'Venda Balcão')}
         </Text>
         <Text style={styles.headerSubtitle}>
-          Venda #{sale?.numeroComanda}
+          {isViewMode ? 'Visualização dos produtos cadastrados' : `Venda #${sale?.numeroComanda}`}
         </Text>
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar produtos..."
-          value={searchText}
-          onChangeText={setSearchText}
-        />
-      </View>
+      {!isViewMode && (
+        <>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar produtos..."
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+          </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-        {categories.map(category => (
-          <TouchableOpacity
-            key={category.key}
-            style={[
-              styles.categoryButton,
-              selectedCategory === category.key && styles.categoryButtonActive
-            ]}
-            onPress={() => setSelectedCategory(category.key)}
-          >
-            <Text style={[
-              styles.categoryButtonText,
-              selectedCategory === category.key && styles.categoryButtonTextActive
-            ]}>
-              {category.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
+            {categories.map(category => (
+              <TouchableOpacity
+                key={category.key}
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === category.key && styles.categoryButtonActive
+                ]}
+                onPress={() => setSelectedCategory(category.key)}
+              >
+                <Text style={[
+                  styles.categoryButtonText,
+                  selectedCategory === category.key && styles.categoryButtonTextActive
+                ]}>
+                  {category.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       <View style={styles.content}>
-        <View style={styles.productsSection}>
-          <FlatList
-            data={filteredProducts}
-            renderItem={renderProduct}
-            keyExtractor={(item) => item._id}
-            numColumns={2}
-            showsVerticalScrollIndicator={false}
-          />
-        </View>
+        {!isViewMode && (
+          <View style={styles.productsSection}>
+            <FlatList
+              data={filteredProducts}
+              renderItem={renderProduct}
+              keyExtractor={(item) => item._id}
+              numColumns={2}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        )}
 
-        <View style={styles.cartSection}>
+        <View style={[styles.cartSection, isViewMode && styles.cartSectionFullWidth]}>
           <View style={styles.cartHeader}>
             <Text style={styles.cartTitle}>Carrinho ({cart.length})</Text>
             <Text style={styles.cartTotal}>R$ {total.toFixed(2)}</Text>
@@ -285,13 +338,15 @@ export default function SaleScreen() {
             showsVerticalScrollIndicator={false}
           />
           
-          <TouchableOpacity
-            style={[styles.finalizeButton, cart.length === 0 && styles.finalizeButtonDisabled]}
-            onPress={() => setModalVisible(true)}
-            disabled={cart.length === 0}
-          >
-            <Text style={styles.finalizeButtonText}>Finalizar Venda</Text>
-          </TouchableOpacity>
+          {!isViewMode && (
+            <TouchableOpacity
+              style={[styles.finalizeButton, cart.length === 0 && styles.finalizeButtonDisabled]}
+              onPress={() => setModalVisible(true)}
+              disabled={cart.length === 0}
+            >
+              <Text style={styles.finalizeButtonText}>Finalizar Venda</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -348,6 +403,14 @@ export default function SaleScreen() {
           </View>
         </View>
       </Modal>
+
+      <ProductSelector
+        visible={productSelectorVisible}
+        onClose={handleCloseProductSelector}
+        onProductSelect={handleProductSelect}
+        title={selectedProduct ? `Adicionar ${selectedProduct.nome}` : 'Adicionar produto'}
+        selectedProduct={selectedProduct}
+      />
     </View>
   );
 }
@@ -462,6 +525,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderLeftWidth: 1,
     borderLeftColor: '#ddd',
+  },
+  cartSectionFullWidth: {
+    borderLeftWidth: 0,
   },
   cartHeader: {
     flexDirection: 'row',

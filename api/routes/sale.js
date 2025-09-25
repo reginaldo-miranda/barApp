@@ -174,6 +174,24 @@ router.get('/finalizadas', async (req, res) => {
   }
 });
 
+// Buscar vendas por mesa
+router.get('/mesa/:mesaId', async (req, res) => {
+  try {
+    const { mesaId } = req.params;
+    
+    const vendas = await Sale.find({ mesa: mesaId })
+      .populate('funcionario', 'nome')
+      .populate('cliente', 'nome')
+      .populate('itens.produto', 'nome precoVenda')
+      .sort({ dataVenda: -1 });
+
+    res.json(vendas);
+  } catch (error) {
+    console.error('Erro ao buscar vendas da mesa:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Buscar venda por ID
 router.get('/:id', async (req, res) => {
   try {

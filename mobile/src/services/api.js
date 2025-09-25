@@ -82,6 +82,7 @@ export const saleService = {
   getAll: () => api.get('/sale/list'),
   getOpen: () => api.get('/sale/open'),
   getById: (id) => api.get(`/sale/${id}`),
+  getByMesa: (mesaId) => api.get(`/sale/mesa/${mesaId}`),
   create: (data) => api.post('/sale/create', data),
   addItem: (id, item) => api.post(`/sale/${id}/item`, item),
   removeItem: (id, itemId) => api.delete(`/sale/${id}/item/${itemId}`),

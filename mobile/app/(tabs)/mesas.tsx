@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { mesaService } from '../../src/services/api';
+import { mesaService, saleService } from '../../src/services/api';
+import ProductSelector from '../../src/components/ProductSelector.js';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 interface Mesa {
   _id: string;
@@ -24,6 +26,10 @@ export default function MesasScreen() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [productSelectorVisible, setProductSelectorVisible] = useState(false);
+  const [selectedMesa, setSelectedMesa] = useState<Mesa | null>(null);
+  const [currentSale, setCurrentSale] = useState<any>(null);
+  const { user } = useAuth();
 
   const loadMesas = async () => {
     try {
@@ -48,6 +54,11 @@ export default function MesasScreen() {
   }, []);
 
   const handleMesaPress = (mesa: Mesa) => {
+    if (!user) {
+      Alert.alert('Erro', 'Usuário não autenticado');
+      return;
+    }
+    
     if (mesa.status === 'livre') {
       Alert.alert(
         'Abrir Mesa',
@@ -63,12 +74,25 @@ export default function MesasScreen() {
         `A mesa ${mesa.numero} está ocupada. O que deseja fazer?`,
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Ver Vendas', onPress: () => router.push(`/sale?mesaId=${mesa._id}`) },
+          { text: 'Adicionar Produtos', onPress: () => openProductSelector(mesa) },
+          { text: 'Ver Vendas', onPress: () => router.push(`/sale?mesaId=${mesa._id}&viewMode=view`) },
           { text: 'Fechar Mesa', style: 'destructive', onPress: () => closeMesa(mesa._id) },
+        ]
+      );
+    } else if (mesa.status === 'reservada') {
+      Alert.alert(
+        'Mesa Reservada',
+        `A mesa ${mesa.numero} está reservada. O que deseja fazer?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir Mesa', onPress: () => openMesa(mesa._id) },
+          { text: 'Liberar Reserva', onPress: () => liberarReserva(mesa._id) },
         ]
       );
     } else if (mesa.status === 'manutencao') {
       Alert.alert('Mesa em Manutenção', 'Esta mesa está em manutenção e não pode ser utilizada.');
+    } else {
+      Alert.alert('Status Desconhecido', `Status da mesa: ${mesa.status}`);
     }
   };
 
@@ -93,6 +117,74 @@ export default function MesasScreen() {
       console.error('Erro ao fechar mesa:', error);
       Alert.alert('Erro', 'Não foi possível fechar a mesa');
     }
+  };
+
+  const liberarReserva = async (mesaId: string) => {
+    try {
+      await mesaService.update(mesaId, { status: 'livre' });
+      await loadMesas();
+      Alert.alert('Sucesso', 'Reserva liberada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao liberar reserva:', error);
+      Alert.alert('Erro', 'Não foi possível liberar a reserva');
+    }
+  };
+
+  const openProductSelector = async (mesa: Mesa) => {
+    try {
+      setSelectedMesa(mesa);
+      // Buscar ou criar venda para a mesa
+      const openSales = await saleService.getOpen();
+      let sale = openSales.data.find((s: any) => s.mesa === mesa._id);
+      
+      if (!sale) {
+        // Criar nova venda para a mesa
+        const newSaleData = {
+          funcionario: user?._id,
+          mesa: mesa._id,
+          tipoVenda: 'mesa',
+          status: 'aberta'
+        };
+        const response = await saleService.create(newSaleData);
+        sale = response.data;
+      }
+      
+      setCurrentSale(sale);
+      setProductSelectorVisible(true);
+    } catch (error) {
+      console.error('Erro ao abrir seletor de produtos:', error);
+      Alert.alert('Erro', 'Não foi possível abrir o seletor de produtos');
+    }
+  };
+
+  const handleProductSelect = async (product: any, quantity: number) => {
+    try {
+      if (!currentSale) {
+        Alert.alert('Erro', 'Nenhuma venda ativa encontrada');
+        return;
+      }
+
+      await saleService.addItem(currentSale._id, {
+        produtoId: product._id,
+        quantidade: quantity
+      });
+
+      Alert.alert(
+        'Sucesso', 
+        `${quantity}x ${product.nome} adicionado à mesa ${selectedMesa?.numero}!`
+      );
+      
+      setProductSelectorVisible(false);
+    } catch (error) {
+      console.error('Erro ao adicionar produto:', error);
+      Alert.alert('Erro', 'Não foi possível adicionar o produto');
+    }
+  };
+
+  const handleCloseProductSelector = () => {
+    setProductSelectorVisible(false);
+    setSelectedMesa(null);
+    setCurrentSale(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -144,28 +236,97 @@ export default function MesasScreen() {
     <TouchableOpacity
       style={[styles.mesaCard, { borderLeftColor: getStatusColor(item.status) }]}
       onPress={() => handleMesaPress(item)}
+      activeOpacity={0.7}
     >
-      <View style={styles.mesaHeader}>
-        <Text style={styles.mesaNumero}>Mesa {item.numero}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Ionicons name={getStatusIcon(item.status) as any} size={16} color="#fff" />
-          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
-        </View>
-      </View>
-      <View style={styles.mesaInfo}>
-        <View style={styles.infoRow}>
-          <Ionicons name="people" size={16} color="#666" />
-          <Text style={styles.infoText}>Capacidade: {item.capacidade} pessoas</Text>
-        </View>
-        {item.observacoes && (
-          <View style={styles.infoRow}>
-            <Ionicons name="information-circle" size={16} color="#666" />
-            <Text style={styles.infoText}>{item.observacoes}</Text>
+        <View style={styles.mesaHeader}>
+          <Text style={styles.mesaNumero}>Mesa {item.numero}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+            <Ionicons name={getStatusIcon(item.status) as any} size={16} color="#fff" />
+            <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+        </View>
+        <View style={styles.mesaInfo}>
+          <View style={styles.infoRow}>
+            <Ionicons name="people" size={16} color="#666" />
+            <Text style={styles.infoText}>Capacidade: {item.capacidade} pessoas</Text>
+          </View>
+          {item.observacoes && (
+            <View style={styles.infoRow}>
+              <Ionicons name="document-text" size={16} color="#666" />
+              <Text style={styles.infoText}>{item.observacoes}</Text>
+            </View>
+          )}
+        </View>
+        
+        {/* Botões de ação baseados no status */}
+        <View style={styles.actionButtons}>
+          {item.status === 'livre' && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.openButton]}
+              onPress={() => openMesa(item._id)}
+            >
+              <Ionicons name="play" size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>Abrir Mesa</Text>
+            </TouchableOpacity>
+          )}
+          
+          {item.status === 'ocupada' && (
+            <View style={styles.buttonRow}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.addButton]}
+                onPress={() => openProductSelector(item)}
+              >
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Produtos</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.viewButton]}
+                onPress={() => router.push(`/sale?mesaId=${item._id}&viewMode=view`)}
+              >
+                <Ionicons name="eye" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Ver Vendas</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.closeButton]}
+                onPress={() => closeMesa(item._id)}
+              >
+                <Ionicons name="close" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {item.status === 'reservada' && (
+            <View style={styles.buttonRow}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.openButton]}
+                onPress={() => openMesa(item._id)}
+              >
+                <Ionicons name="play" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Abrir</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.releaseButton]}
+                onPress={() => liberarReserva(item._id)}
+              >
+                <Ionicons name="unlock" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Liberar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {item.status === 'manutencao' && (
+            <View style={styles.maintenanceInfo}>
+              <Ionicons name="construct" size={16} color="#FF9800" />
+              <Text style={styles.maintenanceText}>Mesa em manutenção</Text>
+            </View>
+          )}
+        </View>
+       </TouchableOpacity>
+   );
 
   const mesasLivres = mesas.filter(m => m.status === 'livre').length;
   const mesasOcupadas = mesas.filter(m => m.status === 'ocupada').length;
@@ -202,6 +363,14 @@ export default function MesasScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
+      />
+
+      {/* Product Selector Modal */}
+      <ProductSelector
+        visible={productSelectorVisible}
+        onClose={handleCloseProductSelector}
+        onProductSelect={handleProductSelect}
+        title={selectedMesa ? `Adicionar à Mesa ${selectedMesa.numero}` : 'Selecionar Produto'}
       />
     </View>
   );
@@ -294,5 +463,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginLeft: 8,
+  },
+  actionButtons: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    minWidth: 80,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  openButton: {
+    backgroundColor: '#4CAF50',
+  },
+  addButton: {
+    backgroundColor: '#2196F3',
+  },
+  viewButton: {
+    backgroundColor: '#FF9800',
+  },
+  closeButton: {
+    backgroundColor: '#F44336',
+  },
+  releaseButton: {
+    backgroundColor: '#9C27B0',
+  },
+  maintenanceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  maintenanceText: {
+    color: '#FF9800',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 });

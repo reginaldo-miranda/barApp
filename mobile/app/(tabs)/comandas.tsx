@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { customerService } from '../../src/services/api';
+import { customerService, saleService } from '../../src/services/api';
+import ProductSelector from '../../src/components/ProductSelector';
+import { useAuth } from '../../src/contexts/AuthContext';
 
 interface Comanda {
   id: number;
@@ -40,6 +42,10 @@ export default function ComandasScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [productSelectorVisible, setProductSelectorVisible] = useState(false);
+  const [selectedComanda, setSelectedComanda] = useState<Comanda | null>(null);
+  const [currentSale, setCurrentSale] = useState<any>(null);
+  const { user } = useAuth();
 
   // Mock data para comandas (substituir por API real quando disponível)
   const mockComandas: Comanda[] = [
@@ -107,6 +113,7 @@ export default function ComandasScreen() {
       `Cliente: ${comanda.customerName}\nTotal: R$ ${comanda.total.toFixed(2)}`,
       [
         { text: 'Cancelar', style: 'cancel' },
+        { text: 'Adicionar Produtos', onPress: () => openProductSelector(comanda) },
         { text: 'Abrir', onPress: () => router.push(`/sale?comandaId=${comanda.id}&comandaNumero=${comanda.numero}`) },
         { text: 'Fechar', style: 'destructive', onPress: () => closeComanda(comanda.id) },
       ]
@@ -153,6 +160,73 @@ export default function ComandasScreen() {
     router.push(`/sale?type=comanda&customerName=${encodeURIComponent(customer.nome)}&comandaNumero=${comandaNumero}`);
   };
 
+  const openProductSelector = async (comanda: Comanda) => {
+    try {
+      setSelectedComanda(comanda);
+      // Buscar ou criar venda para a comanda
+      const openSales = await saleService.getOpen();
+      let sale = openSales.data.find((s: any) => s.nomeComanda === comanda.numero);
+      
+      if (!sale) {
+        // Criar nova venda para a comanda
+        const newSaleData = {
+          funcionario: user?._id,
+          nomeComanda: comanda.numero,
+          tipoVenda: 'comanda',
+          status: 'aberta'
+        };
+        const response = await saleService.create(newSaleData);
+        sale = response.data;
+      }
+      
+      setCurrentSale(sale);
+      setProductSelectorVisible(true);
+    } catch (error) {
+      console.error('Erro ao abrir seletor de produtos:', error);
+      Alert.alert('Erro', 'Não foi possível abrir o seletor de produtos');
+    }
+  };
+
+  const handleProductSelect = async (product: any, quantity: number) => {
+    try {
+      if (!currentSale) {
+        Alert.alert('Erro', 'Nenhuma venda ativa encontrada');
+        return;
+      }
+
+      await saleService.addItem(currentSale._id, {
+        produtoId: product._id,
+        quantidade: quantity
+      });
+
+      Alert.alert(
+        'Sucesso', 
+        `${quantity}x ${product.nome} adicionado à comanda ${selectedComanda?.numero}!`
+      );
+      
+      setProductSelectorVisible(false);
+      
+      // Atualizar total da comanda localmente
+      if (selectedComanda) {
+        const newTotal = selectedComanda.total + (product.precoVenda * quantity);
+        setComandas(prev => prev.map(c => 
+          c.id === selectedComanda.id 
+            ? { ...c, total: newTotal, items: [...c.items, { product, quantity }] }
+            : c
+        ));
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar produto:', error);
+      Alert.alert('Erro', 'Não foi possível adicionar o produto');
+    }
+  };
+
+  const handleCloseProductSelector = () => {
+    setProductSelectorVisible(false);
+    setSelectedComanda(null);
+    setCurrentSale(null);
+  };
+
   const filteredCustomers = customers.filter(customer =>
     customer.nome?.toLowerCase().includes(searchText.toLowerCase()) ||
     (customer.fone && customer.fone.includes(searchText))
@@ -185,7 +259,7 @@ export default function ComandasScreen() {
           </Text>
         </View>
         <View style={styles.infoRow}>
-          <Ionicons name="receipt" size={16} color="#666" />
+          <Ionicons name="list" size={16} color="#666" />
           <Text style={styles.infoText}>
             {item.items.length} {item.items.length === 1 ? 'item' : 'itens'}
           </Text>
@@ -281,6 +355,13 @@ export default function ComandasScreen() {
           />
         </View>
       </Modal>
+
+      <ProductSelector
+        visible={productSelectorVisible}
+        onClose={handleCloseProductSelector}
+        onProductSelect={handleProductSelect}
+        title={selectedComanda ? `Adicionar produtos - ${selectedComanda.numero}` : 'Adicionar produtos'}
+      />
     </View>
   );
 }
