@@ -8,13 +8,10 @@ import { HapticTab } from '@/components/haptic-tab';
 import { useAuth } from '../../src/contexts/AuthContext';
 
 export default function TabLayout() {
-  const { user, isAuthenticated, loading } = useAuth();
+  const authContext = useAuth() as any;
+  const { user, isAuthenticated, loading } = authContext;
 
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, loading]);
+  // Removido o redirecionamento daqui, pois agora é feito no index.tsx
 
   if (loading) {
     return (
