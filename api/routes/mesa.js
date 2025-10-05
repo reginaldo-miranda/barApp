@@ -9,6 +9,7 @@ router.get('/list', async (req, res) => {
   try {
     const mesas = await Mesa.find({ ativo: true })
       .populate('vendaAtual')
+      .populate('funcionarioResponsavel', 'nome')
       .sort({ numero: 1 });
     res.json(mesas);
   } catch (error) {
@@ -45,7 +46,7 @@ router.post('/create', async (req, res) => {
 router.post('/:id/abrir', async (req, res) => {
   try {
     const { id } = req.params;
-    const { numeroClientes = 1 } = req.body;
+    const { numeroClientes = 1, funcionarioId, nomeResponsavel, observacoes } = req.body;
     
     const mesa = await Mesa.findById(id);
     if (!mesa) {
@@ -56,7 +57,11 @@ router.post('/:id/abrir', async (req, res) => {
       return res.status(400).json({ message: 'Mesa já está ocupada' });
     }
 
-    await mesa.abrir(numeroClientes);
+    if (!funcionarioId && !nomeResponsavel) {
+      return res.status(400).json({ message: 'Funcionário responsável ou nome do responsável é obrigatório' });
+    }
+
+    await mesa.abrir(numeroClientes, funcionarioId, nomeResponsavel, observacoes);
     res.json({ message: 'Mesa aberta com sucesso', mesa });
   } catch (error) {
     res.status(500).json({ message: 'Erro ao abrir mesa', error: error.message });

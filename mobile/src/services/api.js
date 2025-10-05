@@ -74,7 +74,7 @@ export const mesaService = {
   getById: (id) => api.get(`/mesa/${id}`),
   create: (data) => api.post('/mesa/create', data),
   update: (id, data) => api.put(`/mesa/${id}`, data),
-  abrir: (id, numeroClientes) => api.post(`/mesa/${id}/abrir`, { numeroClientes }),
+  abrir: (id, numeroClientes, funcionarioId, nomeResponsavel, observacoes) => api.post(`/mesa/${id}/abrir`, { numeroClientes, funcionarioId, nomeResponsavel, observacoes }),
   fechar: (id) => api.post(`/mesa/${id}/fechar`),
 };
 
@@ -98,4 +98,12 @@ export const customerService = {
   create: (data) => api.post('/customer/create', data),
   update: (id, data) => api.put(`/customer/${id}`, data),
   delete: (id) => api.delete(`/customer/${id}`),
+};
+
+export const productGroupService = {
+  getAll: () => api.get('/product-group/list'),
+  getById: (id) => api.get(`/product-group/${id}`),
+  create: (data) => api.post('/product-group/create', data),
+  update: (id, data) => api.put(`/product-group/update/${id}`, data),
+  delete: (id) => api.delete(`/product-group/delete/${id}`),
 };

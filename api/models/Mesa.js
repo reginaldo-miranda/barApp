@@ -32,6 +32,15 @@ const mesaSchema = new mongoose.Schema({
   horaAbertura: {
     type: Date
   },
+  funcionarioResponsavel: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    default: null
+  },
+  nomeResponsavel: {
+    type: String,
+    default: null
+  },
   observacoes: {
     type: String,
     maxlength: 200
@@ -50,10 +59,13 @@ const mesaSchema = new mongoose.Schema({
 });
 
 // Método para abrir mesa
-mesaSchema.methods.abrir = function(numeroClientes = 1) {
+mesaSchema.methods.abrir = function(numeroClientes = 1, funcionarioId = null, nomeResponsavel = null, observacoes = null) {
   this.status = 'ocupada';
   this.clientesAtuais = numeroClientes;
   this.horaAbertura = new Date();
+  this.funcionarioResponsavel = funcionarioId;
+  this.nomeResponsavel = nomeResponsavel;
+  this.observacoes = observacoes;
   return this.save();
 };
 
@@ -63,6 +75,8 @@ mesaSchema.methods.fechar = function() {
   this.vendaAtual = null;
   this.clientesAtuais = 0;
   this.horaAbertura = null;
+  this.funcionarioResponsavel = null;
+  this.nomeResponsavel = null;
   this.observacoes = '';
   return this.save();
 };

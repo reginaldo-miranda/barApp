@@ -27,33 +27,68 @@ const ProductSelector = ({
   const [selectedCategory, setSelectedCategory] = useState('todos');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
-
-  const categories = [
-    { key: 'todos', label: 'Todos', icon: '🍽️' },
-    { key: 'bebidas-alcoolicas', label: 'Bebidas Alcoólicas', icon: '🍺' },
-    { key: 'bebidas-nao-alcoolicas', label: 'Bebidas', icon: '🥤' },
-    { key: 'petiscos', label: 'Petiscos', icon: '🍿' },
-    { key: 'pratos-principais', label: 'Pratos', icon: '🍖' },
-    { key: 'sobremesas', label: 'Sobremesas', icon: '🍰' },
-    { key: 'outros', label: 'Outros', icon: '📦' },
-  ];
+  const [categories, setCategories] = useState([
+    { key: 'todos', label: 'Todos', icon: '🍽️' }
+  ]);
 
   useEffect(() => {
     if (visible) {
+      // Reset filters when modal opens
+      setSearchText('');
+      setSelectedCategory('todos');
       loadProducts();
     }
   }, [visible]);
 
   useEffect(() => {
-    filterProducts();
+    if (products && products.length > 0) {
+      filterProducts();
+    } else if (products && products.length === 0) {
+      setFilteredProducts([]);
+    }
   }, [products, searchText, selectedCategory]);
 
   const loadProducts = async () => {
     try {
       setLoading(true);
+      console.log('Loading products...');
       const response = await productService.getAll();
+      console.log('Raw products response:', response.data?.length || 0, 'products');
+      
       const activeProducts = response.data.filter(product => product.ativo && product.disponivel);
+      console.log('Active products:', activeProducts.length);
+      console.log('Sample product:', activeProducts[0]);
+      
+      // Extrair grupos únicos dos produtos
+      const uniqueGroups = [...new Set(activeProducts.map(product => product.grupo).filter(grupo => grupo && grupo.trim()))];
+      console.log('=== GRUPOS REAIS DOS PRODUTOS ===');
+      console.log('Grupos encontrados:', uniqueGroups);
+      console.log('Total de grupos únicos:', uniqueGroups.length);
+      
+      // Log de alguns produtos com seus grupos
+      console.log('=== EXEMPLOS DE PRODUTOS E GRUPOS ===');
+      activeProducts.slice(0, 5).forEach(product => {
+        console.log(`Produto: "${product.nome}" - Grupo: "${product.grupo}"`);
+      });
+      
+      // Criar categorias dinamicamente baseadas nos grupos dos produtos
+      const dynamicCategories = uniqueGroups.map(grupo => ({
+        key: grupo,
+        label: grupo.charAt(0).toUpperCase() + grupo.slice(1),
+        icon: '📦'
+      }));
+      
+      // Adicionar "Todos" no início
+      const finalCategories = [
+        { key: 'todos', label: 'Todos', icon: '🍽️' },
+        ...dynamicCategories
+      ];
+      
+      console.log('Categorias criadas dinamicamente:', finalCategories);
+      setCategories(finalCategories);
+      
       setProducts(activeProducts);
+      setFilteredProducts(activeProducts);
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       Alert.alert('Erro', 'Não foi possível carregar os produtos');
@@ -62,23 +97,56 @@ const ProductSelector = ({
     }
   };
 
-  const filterProducts = () => {
-    let filtered = products;
 
-    // Filtrar por categoria
-    if (selectedCategory !== 'todos') {
-      filtered = filtered.filter(product => product.categoria === selectedCategory);
+
+  const filterProducts = () => {
+    console.log('=== FILTERING PRODUCTS ===');
+    console.log('Total products:', products.length);
+    console.log('Selected category:', selectedCategory);
+    console.log('Search text:', searchText);
+    
+    if (!products || products.length === 0) {
+      console.log('No products to filter');
+      setFilteredProducts([]);
+      return;
+    }
+    
+    let filtered = [...products];
+    console.log('Starting with', filtered.length, 'products');
+
+    // Filtrar por grupo
+    if (selectedCategory && selectedCategory !== 'todos') {
+      console.log('Filtering by group:', selectedCategory);
+      const beforeFilter = filtered.length;
+      filtered = filtered.filter(product => {
+        const matches = product.grupo === selectedCategory;
+        if (!matches) {
+          console.log(`Product "${product.nome}" group "${product.grupo}" doesn't match "${selectedCategory}"`);
+        }
+        return matches;
+      });
+      console.log(`Group filter: ${beforeFilter} -> ${filtered.length} products`);
     }
 
     // Filtrar por texto de busca
-    if (searchText.trim()) {
-      const searchLower = searchText.toLowerCase();
-      filtered = filtered.filter(product => 
-        product.nome.toLowerCase().includes(searchLower) ||
-        (product.descricao && product.descricao.toLowerCase().includes(searchLower))
-      );
+    if (searchText && searchText.trim()) {
+      console.log('Filtering by search text:', searchText);
+      const searchLower = searchText.toLowerCase().trim();
+      const beforeFilter = filtered.length;
+      filtered = filtered.filter(product => {
+        const nameMatch = product.nome && product.nome.toLowerCase().includes(searchLower);
+        const descMatch = product.descricao && product.descricao.toLowerCase().includes(searchLower);
+        const matches = nameMatch || descMatch;
+        if (!matches) {
+          console.log(`Product "${product.nome}" doesn't match search "${searchText}"`);
+        }
+        return matches;
+      });
+      console.log(`Search filter: ${beforeFilter} -> ${filtered.length} products`);
     }
 
+    console.log('Final filtered products:', filtered.length);
+    console.log('=== END FILTERING ===');
     setFilteredProducts(filtered);
   };
 
@@ -134,29 +202,12 @@ const ProductSelector = ({
 
   const renderProductItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.productCard}
+      style={styles.productRow}
       onPress={() => handleProductPress(item)}
     >
-      <View style={styles.productImageContainer}>
-        {item.imagem ? (
-          <Image source={{ uri: item.imagem }} style={styles.productImage} />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="image-outline" size={24} color="#ccc" />
-          </View>
-        )}
-      </View>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName} numberOfLines={2}>{item.nome}</Text>
-        {item.descricao && (
-          <Text style={styles.productDescription} numberOfLines={1}>
-            {item.descricao}
-          </Text>
-        )}
-        <Text style={styles.productPrice}>
-          R$ {item.precoVenda.toFixed(2)}
-        </Text>
-      </View>
+      <Text style={styles.productName} numberOfLines={1}>{item.nome}</Text>
+      <Text style={styles.productPrice}>R$ {item.precoVenda.toFixed(2)}</Text>
+      <Ionicons name="chevron-forward" size={20} color="#ccc" />
     </TouchableOpacity>
   );
 
@@ -203,7 +254,6 @@ const ProductSelector = ({
           data={filteredProducts}
           renderItem={renderProductItem}
           keyExtractor={(item) => item._id}
-          numColumns={2}
           style={styles.productsList}
           contentContainerStyle={styles.productsContent}
           ListEmptyComponent={
@@ -354,55 +404,33 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productsContent: {
-    padding: 16,
+    paddingVertical: 4,
   },
-  productCard: {
-    flex: 1,
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    margin: 4,
+    padding: 8,
+    marginHorizontal: 16,
+    marginVertical: 1,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  productImageContainer: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  productImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    shadowRadius: 2,
+    elevation: 2,
   },
   productInfo: {
-    alignItems: 'center',
+    flex: 1,
   },
   productName: {
-    fontSize: 14,
+    flex: 1,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  productDescription: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 4,
   },
   productPrice: {
     fontSize: 14,

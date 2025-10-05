@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { mesaService, saleService } from '../../src/services/api';
+import { mesaService, saleService, employeeService } from '../../src/services/api';
 import ProductSelector from '../../src/components/ProductSelector.js';
 import { useAuth } from '../../src/contexts/AuthContext';
 
@@ -49,6 +49,19 @@ export default function MesasScreen() {
   // Refs para timers dos tooltips
   const tooltipCriarTimer = useRef<NodeJS.Timeout | null>(null);
   const tooltipGerarTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Estados para modal de abertura de mesa
+  const [abrirMesaModalVisible, setAbrirMesaModalVisible] = useState(false);
+  const [mesaSelecionada, setMesaSelecionada] = useState<Mesa | null>(null);
+  const [responsavelMesa, setResponsavelMesa] = useState('');
+  
+  // Estados para funcionários
+  const [funcionarios, setFuncionarios] = useState<any[]>([]);
+  const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null);
+  const [funcionarioDropdownOpen, setFuncionarioDropdownOpen] = useState(false);
+  
+  // Estado para observações
+  const [observacoesMesa, setObservacoesMesa] = useState('');
 
   // Funções para gerenciar tooltips
   const showTooltipWithDelay = (setTooltip: (value: boolean) => void, timerRef: React.MutableRefObject<NodeJS.Timeout | null>) => {
@@ -90,6 +103,17 @@ export default function MesasScreen() {
     }
   };
 
+  const loadFuncionarios = async () => {
+    try {
+      const response = await employeeService.getAll();
+      const funcionariosAtivos = response.data.filter((func: any) => func.ativo);
+      setFuncionarios(funcionariosAtivos);
+    } catch (error) {
+      console.error('Erro ao carregar funcionários:', error);
+      Alert.alert('Erro', 'Não foi possível carregar os funcionários');
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadMesas();
@@ -98,6 +122,7 @@ export default function MesasScreen() {
 
   useEffect(() => {
     loadMesas();
+    loadFuncionarios();
   }, []);
 
   const handleMesaPress = (mesa: Mesa) => {
@@ -112,7 +137,7 @@ export default function MesasScreen() {
         `Deseja abrir a mesa ${mesa.numero}?`,
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Abrir', onPress: () => openMesa(mesa._id) },
+          { text: 'Abrir', onPress: () => openMesa(mesa) },
         ]
       );
     } else if (mesa.status === 'ocupada') {
@@ -132,7 +157,7 @@ export default function MesasScreen() {
         `A mesa ${mesa.numero} está reservada. O que deseja fazer?`,
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Abrir Mesa', onPress: () => openMesa(mesa._id) },
+          { text: 'Abrir Mesa', onPress: () => openMesa(mesa) },
           { text: 'Liberar Reserva', onPress: () => liberarReserva(mesa._id) },
         ]
       );
@@ -143,15 +168,84 @@ export default function MesasScreen() {
     }
   };
 
-  const openMesa = async (mesaId: string) => {
+  const limparEstadosModal = () => {
+    setFuncionarioSelecionado('');
+    setResponsavelMesa('');
+    setObservacoesMesa('');
+    setFuncionarioDropdownOpen(false);
+    setMesaSelecionada(null);
+  };
+
+  const openMesa = async (mesa: Mesa) => {
+    // Verificar se a mesa está livre antes de abrir o modal
+    if (mesa.status !== 'livre') {
+      Alert.alert('Erro', 'Esta mesa não está disponível para abertura.');
+      return;
+    }
+    
+    // Abrir modal para solicitar número de clientes
+    setMesaSelecionada(mesa);
+    setNumeroClientes('');
+    setFuncionarioSelecionado('');
+    setFuncionarioDropdownOpen(false);
+    setAbrirMesaModalVisible(true);
+  };
+
+  const confirmarAberturaMesa = async () => {
+    if (!mesaSelecionada) return;
+    
+    if (!numeroClientes || parseInt(numeroClientes) <= 0) {
+      Alert.alert('Erro', 'Por favor, informe um número válido de clientes.');
+      return;
+    }
+
+    if (!funcionarioSelecionado) {
+      Alert.alert('Erro', 'Por favor, selecione um funcionário responsável');
+      return;
+    }
+
+    // Validações de status da mesa
+    if (mesaSelecionada.status === 'ocupada') {
+      Alert.alert('Erro', 'Esta mesa já está ocupada.');
+      return;
+    }
+    
+    if (mesaSelecionada.status === 'manutencao') {
+      Alert.alert('Erro', 'Esta mesa está em manutenção e não pode ser aberta.');
+      return;
+    }
+
+
+
+    await executarAberturaMesa();
+  };
+
+  const executarAberturaMesa = async () => {
+    if (!mesaSelecionada) return;
+
     try {
-      await mesaService.update(mesaId, { status: 'ocupada' });
+      // Usar a rota correta da API: POST /:id/abrir
+      const response = await mesaService.abrir(mesaSelecionada._id, funcionarioSelecionado, responsavelMesa, observacoesMesa);
+      
+      // Recarregar lista de mesas
       await loadMesas();
-      const mesa = mesas.find(m => m._id === mesaId);
-      router.push(`/sale?mesaId=${mesaId}&mesaNumero=${mesa?.numero}`);
-    } catch (error) {
+      
+      // Fechar modal e limpar estados
+      setAbrirMesaModalVisible(false);
+      limparEstadosModal();
+      
+      // Navegar para a tela de vendas
+      router.push({
+        pathname: '/sale',
+        params: { 
+          mesaId: mesaSelecionada._id, 
+          mesaNumero: mesaSelecionada.numero 
+        }
+      });
+      
+    } catch (error: any) {
       console.error('Erro ao abrir mesa:', error);
-      Alert.alert('Erro', 'Não foi possível abrir a mesa');
+      Alert.alert('Erro', error.response?.data?.message || 'Erro ao abrir mesa. Tente novamente.');
     }
   };
 
@@ -463,7 +557,7 @@ export default function MesasScreen() {
           {item.status === 'livre' && (
             <TouchableOpacity 
               style={[styles.actionButton, styles.openButton]}
-              onPress={() => openMesa(item._id)}
+              onPress={() => openMesa(item)}
             >
               <Ionicons name="play" size={16} color="#fff" />
               <Text style={styles.actionButtonText}>Abrir Mesa</Text>
@@ -502,7 +596,7 @@ export default function MesasScreen() {
             <View style={styles.buttonRow}>
               <TouchableOpacity 
                 style={[styles.actionButton, styles.openButton]}
-                onPress={() => openMesa(item._id)}
+                onPress={() => openMesa(item)}
               >
                 <Ionicons name="play" size={16} color="#fff" />
                 <Text style={styles.actionButtonText}>Abrir</Text>
@@ -560,8 +654,6 @@ export default function MesasScreen() {
             <TouchableOpacity
               style={[styles.headerButton, styles.headerButtonSecondary]}
               onPress={abrirModalCriarMesa}
-              onMouseEnter={() => showTooltipWithDelay(setShowTooltipCriar, tooltipCriarTimer)}
-              onMouseLeave={() => hideTooltip(setShowTooltipCriar, tooltipCriarTimer)}
               onPressIn={() => showTooltipWithDelay(setShowTooltipCriar, tooltipCriarTimer)}
               onPressOut={() => hideTooltip(setShowTooltipCriar, tooltipCriarTimer)}
             >
@@ -578,8 +670,6 @@ export default function MesasScreen() {
             <TouchableOpacity
               style={styles.headerButton}
               onPress={gerarMesas}
-              onMouseEnter={() => showTooltipWithDelay(setShowTooltipGerar, tooltipGerarTimer)}
-              onMouseLeave={() => hideTooltip(setShowTooltipGerar, tooltipGerarTimer)}
               onPressIn={() => showTooltipWithDelay(setShowTooltipGerar, tooltipGerarTimer)}
               onPressOut={() => hideTooltip(setShowTooltipGerar, tooltipGerarTimer)}
             >
@@ -629,7 +719,7 @@ export default function MesasScreen() {
               <Text style={styles.modalTitle}>Gerar Mesas Automaticamente</Text>
               <TouchableOpacity
                 onPress={() => setGerarMesasModalVisible(false)}
-                style={styles.closeButton}
+                style={styles.modalCloseButton}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -826,7 +916,7 @@ export default function MesasScreen() {
               <Text style={styles.modalTitle}>Criar Nova Mesa</Text>
               <TouchableOpacity
                 onPress={fecharModalCriarMesa}
-                style={styles.closeButton}
+                style={styles.modalCloseButton}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -922,6 +1012,129 @@ export default function MesasScreen() {
                 ) : (
                   <Text style={styles.confirmButtonText}>Criar Mesa</Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para abrir mesa */}
+      <Modal
+        visible={abrirMesaModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => limparEstadosModal()}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Abrir Mesa {mesaSelecionada?.numero}</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setAbrirMesaModalVisible(false);
+                  limparEstadosModal();
+                }}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={styles.modalDescription}>
+                Preencha as informações para abrir a mesa:
+              </Text>
+              
+              <View style={styles.dropdownFormGroup}>
+                <Text style={styles.formLabel}>Funcionário Responsável *</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setFuncionarioDropdownOpen(!funcionarioDropdownOpen)}
+                >
+                  <Text style={[
+                    styles.dropdownButtonText,
+                    !funcionarioSelecionado && styles.dropdownPlaceholder
+                  ]}>
+                    {funcionarioSelecionado 
+                      ? funcionarios.find(f => f._id === funcionarioSelecionado)?.nome || 'Selecione um funcionário'
+                      : 'Selecione um funcionário'
+                    }
+                  </Text>
+                  <Ionicons 
+                    name={funcionarioDropdownOpen ? "chevron-up" : "chevron-down"} 
+                    size={20} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+                
+                {funcionarioDropdownOpen && (
+                  <View style={styles.dropdownList}>
+                    <ScrollView style={styles.dropdownScrollView} showsVerticalScrollIndicator={false}>
+                      {funcionarios.map((funcionario) => (
+                        <TouchableOpacity
+                          key={funcionario._id}
+                          style={[
+                            styles.dropdownItem,
+                            funcionarioSelecionado === funcionario._id && styles.dropdownItemSelected
+                          ]}
+                          onPress={() => {
+                            setFuncionarioSelecionado(funcionario._id);
+                            setFuncionarioDropdownOpen(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.dropdownItemText,
+                            funcionarioSelecionado === funcionario._id && styles.dropdownItemTextSelected
+                          ]}>
+                            {funcionario.nome}
+                          </Text>
+                          {funcionarioSelecionado === funcionario._id && (
+                            <Ionicons name="checkmark" size={18} color="#4CAF50" />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Nome do Responsável</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={responsavelMesa}
+                  onChangeText={setResponsavelMesa}
+                  placeholder="Digite o nome do responsável pela mesa"
+                  maxLength={100}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Observações</Text>
+                <TextInput
+                  style={[styles.formInput, styles.textAreaSmall]}
+                  value={observacoesMesa}
+                  onChangeText={setObservacoesMesa}
+                  placeholder="Observações sobre a mesa (opcional)"
+                  multiline={true}
+                  numberOfLines={2}
+                  maxLength={200}
+                />
+              </View>
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setAbrirMesaModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={confirmarAberturaMesa}
+              >
+                <Text style={styles.confirmButtonText}>Abrir Mesa</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1173,7 +1386,7 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
   },
-  closeButton: {
+  modalCloseButton: {
     padding: 4,
   },
   modalContent: {
@@ -1243,6 +1456,13 @@ const styles = StyleSheet.create({
   },
   formGroup: {
     marginBottom: 20,
+    position: 'relative',
+    zIndex: 1,
+  },
+  dropdownFormGroup: {
+    marginBottom: 20,
+    position: 'relative',
+    zIndex: 10,
   },
   formLabel: {
     fontSize: 14,
@@ -1262,6 +1482,10 @@ const styles = StyleSheet.create({
   },
   textArea: {
     height: 80,
+    textAlignVertical: 'top',
+  },
+  textAreaSmall: {
+    height: 60,
     textAlignVertical: 'top',
   },
   tipoSelector: {
@@ -1342,5 +1566,72 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2196F3',
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    minHeight: 44,
+  },
+  dropdownButtonText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  dropdownPlaceholder: {
+    color: '#999',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    maxHeight: 200,
+    zIndex: 1000,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  dropdownScrollView: {
+    maxHeight: 200,
+    flexGrow: 0,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  dropdownItemSelected: {
+    backgroundColor: '#e3f2fd',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  dropdownItemTextSelected: {
+    color: '#2196F3',
+    fontWeight: '600',
   },
 });
