@@ -14,11 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { productService, saleService } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { useConfirmation } from '../src/contexts/ConfirmationContext';
 import ProductSelector from '../src/components/ProductSelector';
 
 export default function SaleScreen() {
   const { tipo, mesaId, vendaId, viewMode } = useLocalSearchParams();
   const { user } = useAuth();
+  const { confirmRemove } = useConfirmation();
   
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
@@ -78,6 +80,8 @@ export default function SaleScreen() {
   const loadSale = async () => {
     try {
       const response = await saleService.getById(vendaId);
+      console.log('🔍 loadSale response:', response.data);
+      console.log('🔍 loadSale itens:', response.data.itens);
       setSale(response.data);
       setCart(response.data.itens || []);
     } catch (error) {
@@ -89,9 +93,12 @@ export default function SaleScreen() {
   const loadMesaSale = async () => {
     try {
       const response = await saleService.getByMesa(mesaId);
+      console.log('🔍 loadMesaSale response:', response.data);
       if (response.data && response.data.length > 0) {
         // Pega a venda ativa da mesa
         const activeSale = response.data.find(sale => sale.status === 'aberta') || response.data[0];
+        console.log('🔍 loadMesaSale activeSale:', activeSale);
+        console.log('🔍 loadMesaSale activeSale.itens:', activeSale.itens);
         setSale(activeSale);
         setCart(activeSale.itens || []);
       } else {
@@ -116,7 +123,9 @@ export default function SaleScreen() {
         saleData.mesa = mesaId;
       }
 
+      console.log('🔍 createNewSale saleData:', saleData);
       const response = await saleService.create(saleData);
+      console.log('🔍 createNewSale response:', response.data);
       setSale(response.data);
     } catch (error) {
       console.error('Erro ao criar venda:', error);
@@ -172,27 +181,54 @@ export default function SaleScreen() {
     setSelectedProduct(null);
   };
 
-  const removeFromCart = async (item) => {
-    if (!sale) return;
+  const increaseQuantity = (item) => {
+    console.log('🔍 increaseQuantity chamada com item:', item);
+    
+    setCart(prevCart => {
+      return prevCart.map(cartItem => {
+        if (cartItem._id === item._id) {
+          const newQuantity = cartItem.quantidade + 1;
+          return {
+            ...cartItem,
+            quantidade: newQuantity,
+            subtotal: cartItem.precoUnitario * newQuantity
+          };
+        }
+        return cartItem;
+      });
+    });
+  };
 
-    try {
+  const removeFromCart = async (item) => {
+    console.log('🔍 removeFromCart chamada com item:', item);
+    
+    const confirmed = await confirmRemove(
+      item.quantidade > 1 
+        ? `uma unidade de ${item.nomeProduto}`
+        : `${item.nomeProduto} do carrinho`
+    );
+
+    if (!confirmed) return;
+
+    setCart(prevCart => {
       if (item.quantidade > 1) {
-        // Diminuir quantidade
-        const newQuantity = item.quantidade - 1;
-        await saleService.updateItem(sale._id, item._id, {
-          quantidade: newQuantity,
-          subtotal: newQuantity * item.precoUnitario
+        // Diminui a quantidade
+        return prevCart.map(cartItem => {
+          if (cartItem._id === item._id) {
+            const newQuantity = cartItem.quantidade - 1;
+            return {
+              ...cartItem,
+              quantidade: newQuantity,
+              subtotal: cartItem.precoUnitario * newQuantity
+            };
+          }
+          return cartItem;
         });
       } else {
-        // Remover item
-        await saleService.removeItem(sale._id, item._id);
+        // Remove o item completamente
+        return prevCart.filter(cartItem => cartItem._id !== item._id);
       }
-      
-      loadSale();
-    } catch (error) {
-      console.error('Erro ao remover item:', error);
-      Alert.alert('Erro', 'Não foi possível remover o item');
-    }
+    });
   };
 
   const finalizeSale = async () => {
@@ -255,7 +291,7 @@ export default function SaleScreen() {
         <Text style={styles.cartItemQuantity}>{item.quantidade}</Text>
         <TouchableOpacity
           style={styles.cartButton}
-          onPress={() => addToCart({ _id: item.produto._id, nome: item.nomeProduto, precoVenda: item.precoUnitario })}
+          onPress={() => increaseQuantity(item)}
         >
           <Ionicons name="add" size={16} color="#4CAF50" />
         </TouchableOpacity>

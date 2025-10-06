@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '../src/contexts/AuthContext';
+import { ConfirmationProvider } from '../src/contexts/ConfirmationContext';
 
 export const unstable_settings = {
   anchor: 'index',
@@ -15,15 +16,17 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="sale" options={{ title: 'Nova Venda', headerBackTitle: 'Voltar' }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <ConfirmationProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="sale" options={{ title: 'Nova Venda', headerBackTitle: 'Voltar' }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ConfirmationProvider>
     </AuthProvider>
   );
 }

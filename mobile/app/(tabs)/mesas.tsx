@@ -24,6 +24,11 @@ interface Mesa {
   status: 'livre' | 'ocupada' | 'reservada' | 'manutencao';
   capacidade: number;
   observacoes?: string;
+  nomeResponsavel?: string;
+  funcionarioResponsavel?: {
+    _id: string;
+    nome: string;
+  };
 }
 
 export default function MesasScreen() {
@@ -94,7 +99,38 @@ export default function MesasScreen() {
   const loadMesas = async () => {
     try {
       const response = await mesaService.getAll();
-      setMesas(response.data);
+      const mesasData = response.data;
+      
+      // Para cada mesa ocupada, buscar a venda ativa para obter o nome do responsável
+      const mesasComResponsavel = await Promise.all(
+        mesasData.map(async (mesa: Mesa) => {
+          if (mesa.status === 'ocupada') {
+            try {
+              // Buscar venda ativa da mesa
+              const vendaResponse = await saleService.getByMesa(mesa._id);
+              const vendas = vendaResponse.data;
+              
+              // Encontrar venda aberta
+              const vendaAberta = vendas.find((venda: any) => venda.status === 'aberta');
+              
+              if (vendaAberta && vendaAberta.observacoes) {
+                // Extrair nome do responsável das observações
+                const match = vendaAberta.observacoes.match(/Responsavel:\s*(.+)/i);
+                if (match) {
+                  mesa.nomeResponsavel = match[1].trim();
+                }
+              }
+              
+              console.log(`Mesa ${mesa.numero} - Responsável: ${mesa.nomeResponsavel || 'Não encontrado'}`);
+            } catch (error) {
+              console.error(`Erro ao buscar venda da mesa ${mesa.numero}:`, error);
+            }
+          }
+          return mesa;
+        })
+      );
+      
+      setMesas(mesasComResponsavel);
     } catch (error) {
       console.error('Erro ao carregar mesas:', error);
       Alert.alert('Erro', 'Não foi possível carregar as mesas');
@@ -193,11 +229,6 @@ export default function MesasScreen() {
 
   const confirmarAberturaMesa = async () => {
     if (!mesaSelecionada) return;
-    
-    if (!numeroClientes || parseInt(numeroClientes) <= 0) {
-      Alert.alert('Erro', 'Por favor, informe um número válido de clientes.');
-      return;
-    }
 
     if (!funcionarioSelecionado) {
       Alert.alert('Erro', 'Por favor, selecione um funcionário responsável');
@@ -533,7 +564,11 @@ export default function MesasScreen() {
       activeOpacity={0.7}
     >
         <View style={styles.mesaHeader}>
-          <Text style={styles.mesaNumero}>Mesa {item.numero}</Text>
+          <Text style={styles.mesaNumero}>
+            Mesa {item.numero}
+            {(item.nomeResponsavel || item.funcionarioResponsavel?.nome) && 
+              ` - ${item.nomeResponsavel || item.funcionarioResponsavel?.nome}`}
+          </Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             <Ionicons name={getStatusIcon(item.status) as any} size={16} color="#fff" />
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>

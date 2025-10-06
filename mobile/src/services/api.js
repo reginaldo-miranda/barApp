@@ -74,7 +74,7 @@ export const mesaService = {
   getById: (id) => api.get(`/mesa/${id}`),
   create: (data) => api.post('/mesa/create', data),
   update: (id, data) => api.put(`/mesa/${id}`, data),
-  abrir: (id, numeroClientes, funcionarioId, nomeResponsavel, observacoes) => api.post(`/mesa/${id}/abrir`, { numeroClientes, funcionarioId, nomeResponsavel, observacoes }),
+  abrir: (id, funcionarioId, nomeResponsavel, observacoes) => api.post(`/mesa/${id}/abrir`, { funcionarioId, nomeResponsavel, observacoes }),
   fechar: (id) => api.post(`/mesa/${id}/fechar`),
 };
 
