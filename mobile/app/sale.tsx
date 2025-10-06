@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { productService, saleService } from '../src/services/api';
+import { productService, saleService, mesaService } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useConfirmation } from '../src/contexts/ConfirmationContext';
 import ProductSelector from '../src/components/ProductSelector';
@@ -33,6 +33,8 @@ export default function SaleScreen() {
   const [productSelectorVisible, setProductSelectorVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [nomeResponsavel, setNomeResponsavel] = useState('');
+  const [mesa, setMesa] = useState(null);
 
   const categories = [
     { key: 'todos', label: 'Todos' },
@@ -90,8 +92,24 @@ export default function SaleScreen() {
     }
   };
 
+  const loadMesaData = async () => {
+    try {
+      const response = await mesaService.getAll();
+      const mesaData = response.data.find(m => m._id === mesaId);
+      if (mesaData) {
+        setMesa(mesaData);
+        console.log('🔍 Mesa data loaded:', mesaData);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados da mesa:', error);
+    }
+  };
+
   const loadMesaSale = async () => {
     try {
+      // Carregar dados da mesa primeiro
+      await loadMesaData();
+      
       const response = await saleService.getByMesa(mesaId);
       console.log('🔍 loadMesaSale response:', response.data);
       if (response.data && response.data.length > 0) {
@@ -99,6 +117,16 @@ export default function SaleScreen() {
         const activeSale = response.data.find(sale => sale.status === 'aberta') || response.data[0];
         console.log('🔍 loadMesaSale activeSale:', activeSale);
         console.log('🔍 loadMesaSale activeSale.itens:', activeSale.itens);
+        
+        // Extrair nome do responsável das observações
+        if (activeSale.observacoes) {
+          const match = activeSale.observacoes.match(/Responsavel:\s*(.+)/i);
+          if (match) {
+            setNomeResponsavel(match[1].trim());
+            console.log('🔍 Nome do responsável encontrado:', match[1].trim());
+          }
+        }
+        
         setSale(activeSale);
         setCart(activeSale.itens || []);
       } else {
@@ -302,12 +330,37 @@ export default function SaleScreen() {
     </View>
   );
 
+  // Função para formatar o número da mesa com zero à esquerda
+  const formatMesaNumero = (numero) => {
+    if (!numero && numero !== 0) return '00';
+    const numeroStr = numero.toString();
+    return numeroStr.padStart(2, '0');
+  };
+
+  // Função para formatar data e hora separadamente
+  const formatDate = () => {
+    const now = new Date();
+    return now.toLocaleDateString('pt-BR');
+  };
+
+  const formatTime = () => {
+    const now = new Date();
+    return now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {isViewMode ? `Produtos da Mesa ${sale?.mesa?.numero || mesaId}` : 
-           (tipo === 'mesa' ? `Mesa ${sale?.mesa?.numero}` : 'Venda Balcão')}
+          {isViewMode ? 
+            (nomeResponsavel ? 
+              `Mesa ${formatMesaNumero(mesa?.numero)} - ${nomeResponsavel} - ${formatDate()} - ${formatTime()} - ${sale?._id}` : 
+              `Produtos da Mesa ${formatMesaNumero(mesa?.numero)}`) : 
+           (tipo === 'mesa' ? 
+             (nomeResponsavel ? 
+               `Mesa ${formatMesaNumero(mesa?.numero)} - ${nomeResponsavel} - ${formatDate()} - ${formatTime()} - ${sale?._id}` : 
+               `Mesa ${formatMesaNumero(mesa?.numero)}`) : 
+             'Venda Avulsa')}
         </Text>
         <Text style={styles.headerSubtitle}>
           {isViewMode ? 'Visualização dos produtos cadastrados' : `Venda #${sale?.numeroComanda}`}
