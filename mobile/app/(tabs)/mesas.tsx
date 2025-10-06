@@ -63,6 +63,10 @@ export default function MesasScreen() {
   // Estados para funcionários
   const [funcionarios, setFuncionarios] = useState<any[]>([]);
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null);
+  
+  // Estados para filtros e busca
+  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'livre' | 'ocupada' | 'reservada'>('todos');
+  const [textoBusca, setTextoBusca] = useState('');
   const [funcionarioDropdownOpen, setFuncionarioDropdownOpen] = useState(false);
   
   // Estado para observações
@@ -529,18 +533,25 @@ export default function MesasScreen() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'livre':
-        return 'Livre';
-      case 'ocupada':
-        return 'Ocupada';
-      case 'reservada':
-        return 'Reservada';
-      case 'manutencao':
-        return 'Manutenção';
-      default:
-        return 'Desconhecido';
+      case 'livre': return 'Livre';
+      case 'ocupada': return 'Ocupada';
+      case 'reservada': return 'Reservada';
+      case 'manutencao': return 'Manutenção';
+      default: return 'Desconhecido';
     }
   };
+
+  // Função para filtrar mesas
+  const mesasFiltradas = mesas.filter(mesa => {
+    // Filtro por status
+    const passaFiltroStatus = filtroStatus === 'todos' || mesa.status === filtroStatus;
+    
+    // Filtro por busca (número da mesa)
+    const passaFiltroBusca = textoBusca === '' || 
+      mesa.numero.toString().toLowerCase().includes(textoBusca.toLowerCase());
+    
+    return passaFiltroStatus && passaFiltroBusca;
+  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -663,24 +674,53 @@ export default function MesasScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Barra de busca */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar mesa por número..."
+          value={textoBusca}
+          onChangeText={setTextoBusca}
+          keyboardType="numeric"
+        />
+      </View>
+
       {/* Estatísticas */}
       <View style={styles.statsContainer}>
         <View style={styles.statsLeft}>
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={[
+              styles.statItem,
+              filtroStatus === 'livre' && styles.statItemSelected
+            ]}
+            onPress={() => setFiltroStatus(filtroStatus === 'livre' ? 'todos' : 'livre')}
+          >
             <Text style={styles.statNumber}>{mesasLivres}</Text>
             <Text style={styles.statLabel}>Livres</Text>
             <View style={[styles.statIndicator, { backgroundColor: '#4CAF50' }]} />
-          </View>
-          <View style={styles.statItem}>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.statItem,
+              filtroStatus === 'ocupada' && styles.statItemSelected
+            ]}
+            onPress={() => setFiltroStatus(filtroStatus === 'ocupada' ? 'todos' : 'ocupada')}
+          >
             <Text style={styles.statNumber}>{mesasOcupadas}</Text>
             <Text style={styles.statLabel}>Ocupadas</Text>
             <View style={[styles.statIndicator, { backgroundColor: '#F44336' }]} />
-          </View>
-          <View style={styles.statItem}>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[
+              styles.statItem,
+              filtroStatus === 'reservada' && styles.statItemSelected
+            ]}
+            onPress={() => setFiltroStatus(filtroStatus === 'reservada' ? 'todos' : 'reservada')}
+          >
             <Text style={styles.statNumber}>{mesasReservadas}</Text>
             <Text style={styles.statLabel}>Reservadas</Text>
             <View style={[styles.statIndicator, { backgroundColor: '#FF9800' }]} />
-          </View>
+          </TouchableOpacity>
         </View>
         
         {/* Botões de Ação */}
@@ -721,7 +761,7 @@ export default function MesasScreen() {
 
       {/* Lista de Mesas */}
       <FlatList
-        data={mesas}
+        data={mesasFiltradas}
         renderItem={renderMesa}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.listContainer}
@@ -1256,9 +1296,32 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
+  searchContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#f9f9f9',
+  },
   statItem: {
     alignItems: 'center',
     position: 'relative',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  statItemSelected: {
+    backgroundColor: '#e3f2fd',
   },
   statNumber: {
     fontSize: 24,
