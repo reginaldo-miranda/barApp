@@ -16,7 +16,7 @@ import { productService, saleService, mesaService, comandaService } from '../src
 import { useAuth } from '../src/contexts/AuthContext';
 import { useConfirmation } from '../src/contexts/ConfirmationContext';
 import ProductSelector from '../src/components/ProductSelector';
-import { Sale, CartItem, PaymentMethod, Product } from '../src/types';
+import { Sale, CartItem, PaymentMethod, Product } from '../src/types/index';
 
 export default function SaleScreen() {
   const { tipo, mesaId, vendaId, viewMode } = useLocalSearchParams();
@@ -75,7 +75,7 @@ export default function SaleScreen() {
   const loadProducts = async () => {
     try {
       const response = await productService.getAll();
-      setProducts(response.data.filter(p => p.ativo && p.disponivel));
+      setProducts(response.data.filter((p: Product) => p.ativo && p.disponivel));
     } catch (error) {
       console.error('Erro ao carregar produtos:', error);
       Alert.alert('Erro', 'Não foi possível carregar os produtos');
@@ -132,7 +132,7 @@ export default function SaleScreen() {
       console.log('🔍 loadMesaSale response:', response.data);
       if (response.data && response.data.length > 0) {
         // Pega a venda ativa da mesa
-        const activeSale = response.data.find(sale => sale.status === 'aberta') || response.data[0];
+        const activeSale = response.data.find((sale: Sale) => sale.status === 'aberta') || response.data[0];
         console.log('🔍 loadMesaSale activeSale:', activeSale);
         console.log('🔍 loadMesaSale activeSale.itens:', activeSale.itens);
         
@@ -210,11 +210,11 @@ export default function SaleScreen() {
           subtotal: product.precoVenda * quantity
         };
         if (tipo === 'comanda') {
-          const newItem = await comandaService.addItem(sale._id, itemData);
-          setCart(prevCart => [...prevCart, newItem]);
+          const response = await comandaService.addItem(sale._id, itemData);
+          setCart(prevCart => [...prevCart, response.data]);
         } else {
-          const newItem = await saleService.addItem(sale._id, itemData);
-          setCart(prevCart => [...prevCart, newItem]);
+          const response = await saleService.addItem(sale._id, itemData);
+          setCart(prevCart => [...prevCart, response.data]);
         }
       }
     } catch (error) {
@@ -404,7 +404,7 @@ export default function SaleScreen() {
              'Venda Avulsa')}
         </Text>
         <Text style={styles.headerSubtitle}>
-          {isViewMode ? 'Visualização dos produtos cadastrados' : `Venda #${sale?.numeroComanda}`}
+          {isViewMode ? 'Visualização dos produtos cadastrados' : `Venda #${sale?._id}`}
         </Text>
       </View>
 

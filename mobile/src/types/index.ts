@@ -49,7 +49,10 @@ export interface Comanda {
     email?: string;
   };
   customerId?: string;
-  funcionario: string;
+  funcionario: {
+    _id: string;
+    nome: string;
+  };
   status: 'aberta' | 'fechada' | 'cancelada';
   total: number;
   itens: CartItem[];

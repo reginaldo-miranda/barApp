@@ -12,17 +12,71 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { productService, comandaService } from '../services/api';
+interface Categoria {
+  id: string;
+  nome: string;
+  icon: string;
+}
+
+interface ProdutoExtendido {
+  _id: string;
+  nome: string;
+  descricao: string;
+  precoVenda: number;
+  categoria: string;
+  ativo: boolean;
+  disponivel: boolean;
+  grupo?: string;
+}
+
+interface CartItem {
+  _id: string;
+  produto: {
+    _id: string;
+    nome: string;
+    preco: number;
+  };
+  nomeProduto: string;
+  quantidade: number;
+  precoUnitario: number;
+  subtotal: number;
+  observacoes?: string;
+}
+
+interface Comanda {
+  _id: string;
+  numeroComanda?: string;
+  nomeComanda?: string;
+  cliente?: {
+    _id: string;
+    nome: string;
+    fone?: string;
+    email?: string;
+  };
+  customerId?: string;
+  funcionario: {
+    _id: string;
+    nome: string;
+  };
+  status: 'aberta' | 'fechada' | 'cancelada';
+  total: number;
+  itens: CartItem[];
+  observacoes?: string;
+  tipoVenda: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  comanda: any;
+  comanda: Comanda | null;
   onUpdateComanda: () => void;
 }
 
 export default function ProdutosComandaModal({ visible, onClose, comanda, onUpdateComanda }: Props) {
-  const [produtos, setProdutos] = useState([]);
-  const [categorias, setCategorias] = useState([
+  const [produtos, setProdutos] = useState<ProdutoExtendido[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([
     { id: 'todos', nome: 'Todos', icon: '🍽️' }
   ]);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState('todos');
@@ -39,17 +93,17 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
   const loadProdutos = async () => {
     try {
       const response = await productService.getAll();
-      const produtosAtivos = response.data?.filter(prod => prod.ativo) || [];
+      const produtosAtivos = response.data?.filter((prod: ProdutoExtendido) => prod.ativo) || [];
       setProdutos(produtosAtivos);
       
       // Extrair grupos únicos dos produtos para criar categorias dinâmicas
-      const gruposUnicos = [...new Set(produtosAtivos
-        .map(produto => produto.grupo)
-        .filter(grupo => grupo && grupo.trim() !== '')
-      )];
+      const grupos = produtosAtivos
+        .map((produto: ProdutoExtendido) => produto.grupo)
+        .filter((grupo: string | undefined): grupo is string => grupo !== undefined && grupo.trim() !== '');
+      const gruposUnicos: string[] = Array.from(new Set(grupos));
       
       // Mapear grupos para categorias com ícones
-      const iconesPorGrupo = {
+      const iconesPorGrupo: { [key: string]: string } = {
         'bebidas': '🥤',
         'comidas': '🍖',
         'limpeza': '🧽',
@@ -58,9 +112,9 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
         'default': '📦'
       };
       
-      const novasCategorias = [
+      const novasCategorias: Categoria[] = [
         { id: 'todos', nome: 'Todos', icon: '🍽️' },
-        ...gruposUnicos.map(grupo => ({
+        ...gruposUnicos.map((grupo: string) => ({
           id: grupo,
           nome: grupo.charAt(0).toUpperCase() + grupo.slice(1),
           icon: iconesPorGrupo[grupo.toLowerCase()] || iconesPorGrupo.default
@@ -73,7 +127,7 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
     }
   };
 
-  const adicionarItem = async (produto: any) => {
+  const adicionarItem = async (produto: ProdutoExtendido) => {
     if (!comanda || !produto?._id) {
       Alert.alert('Erro', 'Dados inválidos');
       return;
@@ -104,7 +158,7 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
     }
   };
 
-  const removerItem = async (produto: any) => {
+  const removerItem = async (produto: ProdutoExtendido) => {
     if (!comanda || !produto?._id) return;
 
     // Adicionar produto ao loading
@@ -127,15 +181,15 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
     }
   };
 
-  const produtosFiltrados = produtos.filter(produto => {
+  const produtosFiltrados = produtos.filter((produto: ProdutoExtendido) => {
     const matchCategoria = categoriaSelecionada === 'todos' || produto.grupo === categoriaSelecionada;
     const matchBusca = produto.nome.toLowerCase().includes(buscarProduto.toLowerCase());
     return matchCategoria && matchBusca;
   });
 
-  const renderProduto = ({ item: produto }) => {
+  const renderProduto = ({ item: produto }: { item: ProdutoExtendido }) => {
     // Calcular quantidade já adicionada na comanda
-    const itemNaComanda = comanda?.itens?.find(item => item.produto._id === produto._id);
+    const itemNaComanda = comanda?.itens?.find((item: CartItem) => item.produto._id === produto._id);
     const quantidadeNaComanda = itemNaComanda ? itemNaComanda.quantidade : 0;
     const isLoading = loadingItems.has(produto._id);
     
@@ -208,13 +262,11 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
             </TouchableOpacity>
           </View>
 
-
-
           <ScrollView style={styles.modalBody}>
             {/* Filtros de Categoria */}
             <View style={styles.categoriasContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categorias.map(categoria => (
+                {categorias.map((categoria: Categoria) => (
                   <TouchableOpacity
                     key={categoria.id}
                     style={[
@@ -257,9 +309,9 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
             {/* Lista de Produtos */}
             <ScrollView style={styles.produtosList}>
               {produtosFiltrados.length > 0 ? (
-                produtosFiltrados.map((produto) => {
+                produtosFiltrados.map((produto: ProdutoExtendido) => {
                   // Calcular quantidade já adicionada na comanda
-                  const itemNaComanda = comanda?.itens?.find(item => item.produto._id === produto._id);
+                  const itemNaComanda = comanda?.itens?.find((item: CartItem) => item.produto._id === produto._id);
                   const quantidadeNaComanda = itemNaComanda ? itemNaComanda.quantidade : 0;
                   const isLoading = loadingItems.has(produto._id);
                   

@@ -14,7 +14,8 @@ import { useAuth } from '../../src/contexts/AuthContext';
 import { saleService, mesaService } from '../../src/services/api';
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const authContext = useAuth() as any;
+  const { user, logout } = authContext;
   const [stats, setStats] = useState({
     totalSales: 0,
     totalRevenue: 0,
@@ -30,20 +31,56 @@ export default function HomeScreen() {
         mesaService.getAll(),
       ]);
 
+      const today = new Date().toDateString();
+      
+      // Filtrar todas as vendas/comandas de hoje
       const todaySales = salesResponse.data.filter(
         (sale: any) =>
-          new Date(sale.createdAt).toDateString() === new Date().toDateString()
+          new Date(sale.createdAt).toDateString() === today
       );
 
+      // Separar por tipo para estatísticas específicas
+      const todayVendasBalcao = todaySales.filter((sale: any) => 
+        sale.tipoVenda === 'balcao' && sale.status === 'finalizada'
+      );
+      
+      const todayVendasMesa = todaySales.filter((sale: any) => 
+        sale.tipoVenda === 'mesa' && sale.status === 'finalizada'
+      );
+      
+      const todayComandas = todaySales.filter((sale: any) => 
+        sale.tipoVenda === 'comanda'
+      );
+
+      // Contar mesas ocupadas
       const openTables = mesasResponse.data.filter(
         (mesa: any) => mesa.status === 'ocupada'
       ).length;
 
+      // Contar TODAS as comandas abertas (não apenas do dia)
+      const allComandas = salesResponse.data.filter((sale: any) => 
+        sale.tipoVenda === 'comanda'
+      );
+      
+      const openComandas = allComandas.filter(
+        (comanda: any) => comanda.status === 'aberta'
+      ).length;
+
+      // Calcular vendas finalizadas (todas as vendas fechadas do dia)
+      const finalizedSales = todaySales.filter((sale: any) => 
+        sale.status === 'finalizada' || sale.status === 'fechada'
+      );
+
+      // Calcular receita total (sem duplicação)
+      const totalRevenue = finalizedSales.reduce((sum: number, sale: any) => {
+        return sum + (parseFloat(sale.total) || 0);
+      }, 0);
+
       setStats({
-        totalSales: todaySales.length,
-        totalRevenue: todaySales.reduce((sum: number, sale: any) => sum + sale.total, 0),
+        totalSales: finalizedSales.length, // Total de vendas finalizadas
+        totalRevenue: totalRevenue, // Faturamento total sem duplicação
         openTables,
-        openComandas: 0, // TODO: Implementar quando tiver endpoint de comandas
+        openComandas,
       });
     } catch (error) {
       console.error('Erro ao carregar estatísticas:', error);
@@ -143,7 +180,7 @@ export default function HomeScreen() {
           <View style={[styles.statCard, { backgroundColor: '#F3E5F5' }]}>
             <Ionicons name="receipt" size={24} color="#9C27B0" />
             <Text style={styles.statNumber}>{stats.openComandas}</Text>
-            <Text style={styles.statLabel}>Comandas</Text>
+            <Text style={styles.statLabel}>Comandas Abertas</Text>
           </View>
         </View>
       </View>

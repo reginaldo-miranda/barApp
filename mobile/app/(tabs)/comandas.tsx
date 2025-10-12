@@ -5,7 +5,7 @@ import CriarComandaModal from '../../src/components/CriarComandaModal';
 import ProdutosComandaModal from '../../src/components/ProdutosComandaModal';
 import { comandaService } from '../../src/services/api';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { Comanda } from '../../src/types';
+import { Comanda } from '../../src/types/index';
 
 export default function ComandasAbertasScreen() {
   const [modalVisible, setModalVisible] = useState(false);
@@ -21,7 +21,7 @@ export default function ComandasAbertasScreen() {
       const response = await comandaService.getAll();
       console.log('Resposta da API:', response.data);
       // Filtrar apenas comandas abertas do tipo comanda (igual ao frontend web)
-      const comandasAbertas = response.data?.filter(venda => 
+      const comandasAbertas = response.data?.filter((venda: Comanda) => 
         venda.tipoVenda === 'comanda' && venda.status === 'aberta'
       ) || [];
       setComandas(comandasAbertas);
