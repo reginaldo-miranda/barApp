@@ -13,6 +13,16 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { employeeService } from '../services/api';
 
+interface Funcionario {
+  _id: string;
+  nome: string;
+}
+
+interface Cliente {
+  _id: string;
+  nome: string;
+}
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -23,8 +33,8 @@ export default function CriarComandaModal({ visible, onClose, onSubmit }: Props)
   const [nomeComanda, setNomeComanda] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [valorTotalEstimado, setValorTotalEstimado] = useState('0');
-  const [funcionarios, setFuncionarios] = useState([]);
-  const [clientes, setClientes] = useState([]);
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [selectedFuncionario, setSelectedFuncionario] = useState('');
   const [selectedCliente, setSelectedCliente] = useState('');
   const [loading, setLoading] = useState(false);
