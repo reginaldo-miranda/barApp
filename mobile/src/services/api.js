@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuração base da API
-const API_BASE_URL = 'http://localhost:4000/api';
+const API_BASE_URL = 'http://192.168.0.176:4000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -106,4 +106,28 @@ export const productGroupService = {
   create: (data) => api.post('/product-group/create', data),
   update: (id, data) => api.put(`/product-group/update/${id}`, data),
   delete: (id) => api.delete(`/product-group/delete/${id}`),
+};
+
+export const comandaService = {
+  getAll: () => api.get('/sale/list'),
+  getOpen: () => api.get('/sale/open'),
+  getById: (id) => api.get(`/sale/${id}`),
+  getByCustomer: (customerId) => api.get(`/sale/list?cliente=${customerId}`),
+  create: (data) => api.post('/sale/create', {
+    funcionario: data.funcionario || '68bf331631cb3776a24a2dbe', // ID do João Silva
+    cliente: data.cliente,
+    tipoVenda: 'comanda',
+    nomeComanda: data.nomeComanda,
+    observacoes: data.observacoes
+  }),
+  addItem: (id, item) => api.post(`/sale/${id}/item`, {
+    produtoId: item.produto._id,
+    quantidade: item.quantidade
+  }),
+  removeItem: (id, produtoId) => api.delete(`/sale/${id}/item/${produtoId}`),
+  updateItem: (id, produtoId, data) => api.put(`/sale/${id}/item/${produtoId}`, data),
+  applyDiscount: (id, discount) => api.put(`/sale/${id}/discount`, { desconto: discount }),
+  finalize: (id, formaPagamento) => api.put(`/sale/${id}/finalize`, { formaPagamento }),
+  cancel: (id) => api.put(`/sale/${id}/cancel`),
+  close: (id) => api.put(`/sale/${id}/finalize`, { formaPagamento: 'pendente' }),
 };

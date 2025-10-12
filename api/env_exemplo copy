@@ -1,3 +1,0 @@
-MONGO_URI=mongodb+srv://regibar:senharegibar@cluster0.5pluavy.mongodb.net/meubar?retryWrites=true&w=majority
-JWT_SECRET=thunder
-PORT=3000

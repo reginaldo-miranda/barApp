@@ -12,29 +12,30 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { productService, saleService, mesaService } from '../src/services/api';
+import { productService, saleService, mesaService, comandaService } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useConfirmation } from '../src/contexts/ConfirmationContext';
 import ProductSelector from '../src/components/ProductSelector';
+import { Sale, CartItem, PaymentMethod, Product } from '../src/types';
 
 export default function SaleScreen() {
   const { tipo, mesaId, vendaId, viewMode } = useLocalSearchParams();
-  const { user } = useAuth();
+  const { user } = useAuth() as any;
   const { confirmRemove } = useConfirmation();
   
-  const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [sale, setSale] = useState(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [sale, setSale] = useState<Sale | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('todos');
   const [modalVisible, setModalVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('dinheiro');
   const [productSelectorVisible, setProductSelectorVisible] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [nomeResponsavel, setNomeResponsavel] = useState('');
-  const [mesa, setMesa] = useState(null);
+  const [mesa, setMesa] = useState<any>(null);
 
   const categories = [
     { key: 'todos', label: 'Todos' },
@@ -45,7 +46,7 @@ export default function SaleScreen() {
     { key: 'sobremesas', label: 'Sobremesas' },
   ];
 
-  const paymentMethods = [
+  const paymentMethods: PaymentMethod[] = [
     { key: 'dinheiro', label: 'Dinheiro', icon: 'cash' },
     { key: 'cartao', label: 'Cartão', icon: 'card' },
     { key: 'pix', label: 'PIX', icon: 'phone-portrait' },
@@ -60,7 +61,11 @@ export default function SaleScreen() {
       setIsViewMode(false);
       loadProducts();
       if (vendaId) {
-        loadSale();
+        if (tipo === 'comanda') {
+          loadComandaSale();
+        } else {
+          loadSale();
+        }
       } else {
         createNewSale();
       }
@@ -92,10 +97,23 @@ export default function SaleScreen() {
     }
   };
 
+  const loadComandaSale = async () => {
+    try {
+      const response = await comandaService.getById(vendaId);
+      console.log('🔍 loadComandaSale response:', response.data);
+      console.log('🔍 loadComandaSale itens:', response.data.itens);
+      setSale(response.data);
+      setCart(response.data.itens || []);
+    } catch (error) {
+      console.error('Erro ao carregar comanda:', error);
+      Alert.alert('Erro', 'Não foi possível carregar a comanda');
+    }
+  };
+
   const loadMesaData = async () => {
     try {
       const response = await mesaService.getAll();
-      const mesaData = response.data.find(m => m._id === mesaId);
+      const mesaData = response.data.find((m: any) => m._id === mesaId);
       if (mesaData) {
         setMesa(mesaData);
         console.log('🔍 Mesa data loaded:', mesaData);
@@ -142,7 +160,7 @@ export default function SaleScreen() {
 
   const createNewSale = async () => {
     try {
-      const saleData = {
+      const saleData: any = {
         funcionario: user._id,
         tipoVenda: tipo || 'balcao',
       };
@@ -162,7 +180,7 @@ export default function SaleScreen() {
     }
   };
 
-  const addToCart = async (product, quantity = 1) => {
+  const addToCart = async (product: Product, quantity = 1) => {
     if (!sale) return;
 
     try {
@@ -171,34 +189,46 @@ export default function SaleScreen() {
       if (existingItem) {
         // Atualizar quantidade
         const newQuantity = existingItem.quantidade + quantity;
-        await saleService.updateItem(sale._id, existingItem._id, {
-          quantidade: newQuantity,
-          subtotal: newQuantity * product.precoVenda
-        });
+        if (tipo === 'comanda') {
+          await comandaService.updateItem(sale._id, existingItem._id, {
+            quantidade: newQuantity,
+            subtotal: newQuantity * product.precoVenda
+          });
+        } else {
+          await saleService.updateItem(sale._id, existingItem._id, {
+            quantidade: newQuantity,
+            subtotal: newQuantity * product.precoVenda
+          });
+        }
       } else {
         // Adicionar novo item
-        await saleService.addItem(sale._id, {
+        const itemData = {
           produto: product._id,
           nomeProduto: product.nome,
           quantidade: quantity,
           precoUnitario: product.precoVenda,
           subtotal: product.precoVenda * quantity
-        });
+        };
+        if (tipo === 'comanda') {
+          const newItem = await comandaService.addItem(sale._id, itemData);
+          setCart(prevCart => [...prevCart, newItem]);
+        } else {
+          const newItem = await saleService.addItem(sale._id, itemData);
+          setCart(prevCart => [...prevCart, newItem]);
+        }
       }
-      
-      loadSale(); // Recarregar venda para atualizar carrinho
     } catch (error) {
       console.error('Erro ao adicionar item:', error);
       Alert.alert('Erro', 'Não foi possível adicionar o item');
     }
   };
 
-  const openProductSelector = (product) => {
+  const openProductSelector = (product: any) => {
     setSelectedProduct(product);
     setProductSelectorVisible(true);
   };
 
-  const handleProductSelect = async (product, quantity) => {
+  const handleProductSelect = async (product: any, quantity: number) => {
     await addToCart(product, quantity);
     setProductSelectorVisible(false);
     setSelectedProduct(null);
@@ -209,7 +239,7 @@ export default function SaleScreen() {
     setSelectedProduct(null);
   };
 
-  const increaseQuantity = (item) => {
+  const increaseQuantity = (item: any) => {
     console.log('🔍 increaseQuantity chamada com item:', item);
     
     setCart(prevCart => {
@@ -227,7 +257,7 @@ export default function SaleScreen() {
     });
   };
 
-  const removeFromCart = async (item) => {
+  const removeFromCart = async (item: any) => {
     console.log('🔍 removeFromCart chamada com item:', item);
     
     const confirmed = await confirmRemove(
@@ -266,7 +296,18 @@ export default function SaleScreen() {
     }
 
     try {
-      await saleService.finalize(sale._id, paymentMethod);
+      const finalizeData = {
+        metodoPagamento: paymentMethod,
+        total: total
+      };
+      
+      if (tipo === 'comanda') {
+        await comandaService.finalize(sale._id, finalizeData);
+      } else {
+        await saleService.finalize(sale._id, finalizeData);
+      }
+      
+      setModalVisible(false);
       Alert.alert(
         'Sucesso',
         'Venda finalizada com sucesso!',
@@ -278,15 +319,15 @@ export default function SaleScreen() {
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.nome.toLowerCase().includes(searchText.toLowerCase());
-    const matchesCategory = selectedCategory === 'todos' || product.categoria === selectedCategory;
+  const filteredProducts = products.filter((p: Product) => {
+    const matchesSearch = p.nome.toLowerCase().includes(searchText.toLowerCase());
+    const matchesCategory = selectedCategory === 'todos' || p.categoria === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const total = cart.reduce((sum, item) => sum + item.subtotal, 0);
+  const total = cart.reduce((sum, item) => sum + (item.quantidade * item.precoUnitario), 0);
 
-  const renderProduct = ({ item }) => (
+  const renderProduct = ({ item }: { item: Product }) => (
     <TouchableOpacity style={styles.productCard} onPress={() => openProductSelector(item)}>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.nome}</Text>
@@ -301,7 +342,7 @@ export default function SaleScreen() {
     </TouchableOpacity>
   );
 
-  const renderCartItem = ({ item }) => (
+  const renderCartItem = ({ item }: { item: any }) => (
     <View style={styles.cartItem}>
       <View style={styles.cartItemInfo}>
         <Text style={styles.cartItemName}>{item.nomeProduto}</Text>
@@ -331,7 +372,7 @@ export default function SaleScreen() {
   );
 
   // Função para formatar o número da mesa com zero à esquerda
-  const formatMesaNumero = (numero) => {
+  const formatMesaNumero = (numero: number) => {
     if (!numero && numero !== 0) return '00';
     const numeroStr = numero.toString();
     return numeroStr.padStart(2, '0');
@@ -498,7 +539,6 @@ export default function SaleScreen() {
         onClose={handleCloseProductSelector}
         onProductSelect={handleProductSelect}
         title={selectedProduct ? `Adicionar ${selectedProduct.nome}` : 'Adicionar produto'}
-        selectedProduct={selectedProduct}
       />
     </View>
   );
