@@ -83,6 +83,10 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
   const [buscarProduto, setBuscarProduto] = useState('');
   const [quantidade, setQuantidade] = useState(1);
   const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
+  
+  // Novos estados para os modais
+  const [itensSelecionadosModalVisible, setItensSelecionadosModalVisible] = useState(false);
+  const [fecharComandaModalVisible, setFecharComandaModalVisible] = useState(false);
 
   useEffect(() => {
     if (visible && comanda) {
@@ -159,7 +163,10 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
   };
 
   const removerItem = async (produto: ProdutoExtendido) => {
-    if (!comanda || !produto?._id) return;
+    if (!comanda || !produto?._id) {
+      Alert.alert('Erro', 'Dados inválidos');
+      return;
+    }
 
     // Adicionar produto ao loading
     setLoadingItems(prev => new Set(prev).add(produto._id));
@@ -178,6 +185,69 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
         newSet.delete(produto._id);
         return newSet;
       });
+    }
+  };
+
+  // Função para incrementar quantidade no modal de itens selecionados
+  const incrementarQuantidadeItem = async (item: CartItem) => {
+    if (!comanda || !item?.produto?._id) {
+      Alert.alert('Erro', 'Dados inválidos');
+      return;
+    }
+
+    // Criar objeto produto a partir do item da comanda
+    const produtoFromItem: ProdutoExtendido = {
+      _id: item.produto._id,
+      nome: item.nomeProduto,
+      descricao: '',
+      precoVenda: item.precoUnitario,
+      categoria: '',
+      ativo: true,
+      disponivel: true,
+      grupo: ''
+    };
+
+    await adicionarItem(produtoFromItem);
+  };
+
+  // Função para decrementar quantidade no modal de itens selecionados
+  const decrementarQuantidadeItem = async (item: CartItem) => {
+    if (!comanda || !item?.produto?._id) {
+      Alert.alert('Erro', 'Dados inválidos');
+      return;
+    }
+
+    // Criar objeto produto a partir do item da comanda
+    const produtoFromItem: ProdutoExtendido = {
+      _id: item.produto._id,
+      nome: item.nomeProduto,
+      descricao: '',
+      precoVenda: item.precoUnitario,
+      categoria: '',
+      ativo: true,
+      disponivel: true,
+      grupo: ''
+    };
+
+    await removerItem(produtoFromItem);
+  };
+
+  // Função para fechar comanda
+  const fecharComanda = async () => {
+    if (!comanda) {
+      Alert.alert('Erro', 'Nenhuma comanda selecionada');
+      return;
+    }
+
+    try {
+      await comandaService.close(comanda._id);
+      Alert.alert('Sucesso', 'Comanda fechada com sucesso!');
+      setFecharComandaModalVisible(false);
+      onUpdateComanda();
+      onClose();
+    } catch (error) {
+      console.error('Erro ao fechar comanda:', error);
+      Alert.alert('Erro', 'Não foi possível fechar a comanda');
     }
   };
 
@@ -249,12 +319,15 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
           {/* Header */}
           <View style={styles.modalHeader}>
             <View style={styles.comandaInfo}>
-              <Text style={styles.modalTitle}>📋 Produtos da Comanda</Text>
+              <Text style={styles.modalTitle}>Adicionar Produtos</Text>
               <Text style={styles.comandaDetalhes}>
-                👨‍💼 Funcionário: {comanda.funcionario?.nome?.toUpperCase() || 'NÃO DEFINIDO'}
+                {comanda?.numeroComanda || comanda?.nomeComanda}
+              </Text>
+              <Text style={styles.comandaDetalhes}>
+                Cliente: {comanda?.cliente?.nome || 'Não informado'}
               </Text>
               <Text style={styles.comandaTotal}>
-                Total: R$ {comanda.total?.toFixed(2) || '0,00'}
+                Total: R$ {comanda?.total?.toFixed(2) || '0,00'}
               </Text>
             </View>
             <TouchableOpacity style={styles.btnFechar} onPress={onClose}>
@@ -262,11 +335,31 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
             </TouchableOpacity>
           </View>
 
+          {/* Botões de Ação */}
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => setItensSelecionadosModalVisible(true)}
+            >
+              <Ionicons name="list-outline" size={20} color="white" />
+              <Text style={styles.actionButtonText}>Itens Selecionados</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.closeComandaButton]}
+              onPress={() => setFecharComandaModalVisible(true)}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="white" />
+              <Text style={styles.actionButtonText}>Fechar Comanda</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Body */}
           <ScrollView style={styles.modalBody}>
-            {/* Filtros de Categoria */}
+            {/* Categorias */}
             <View style={styles.categoriasContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categorias.map((categoria: Categoria) => (
+                {categorias.map((categoria) => (
                   <TouchableOpacity
                     key={categoria.id}
                     style={[
@@ -316,7 +409,7 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
                   const isLoading = loadingItems.has(produto._id);
                   
                   return (
-                    <View key={produto._id} style={[styles.produtoCard, quantidadeNaComanda > 0 && styles.produtoAdicionado]}>
+                    <View key={produto._id} style={styles.produtoCard}>
                       <View style={styles.produtoInfo}>
                         <Text style={styles.produtoNome}>{produto.nome}</Text>
                         <Text style={styles.produtoPreco}>R$ {produto.precoVenda?.toFixed(2)}</Text>
@@ -335,11 +428,7 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
                         
                         <TouchableOpacity 
                           style={[styles.btnControle, isLoading && styles.btnControleDisabled]}
-                          onPress={() => {
-                            console.log('BOTÃO CLICADO! Produto:', produto.nome);
-                            Alert.alert('Teste', `Clicou no produto: ${produto.nome}`);
-                            adicionarItem(produto);
-                          }}
+                          onPress={() => adicionarItem(produto)}
                           disabled={isLoading}
                         >
                           <Text style={styles.btnControleText}>
@@ -363,6 +452,109 @@ export default function ProdutosComandaModal({ visible, onClose, comanda, onUpda
           </ScrollView>
         </View>
       </View>
+
+      {/* Modal de Itens Selecionados */}
+      <Modal visible={itensSelecionadosModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.comandaInfo}>
+                <Text style={styles.modalTitle}>Itens Selecionados</Text>
+                <Text style={styles.comandaDetalhes}>
+                  {comanda?.numeroComanda || comanda?.nomeComanda}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.btnFechar} 
+                onPress={() => setItensSelecionadosModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {comanda?.itens && comanda.itens.length > 0 ? (
+                comanda.itens.map((item: CartItem, index: number) => (
+                  <View key={`${item._id}-${index}`} style={styles.itemSelecionadoCard}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemNome}>{item.nomeProduto}</Text>
+                      <Text style={styles.itemPreco}>R$ {item.precoUnitario?.toFixed(2)}</Text>
+                    </View>
+                    
+                    <View style={styles.itemControles}>
+                      <TouchableOpacity 
+                        style={styles.btnControle}
+                        onPress={() => decrementarQuantidadeItem(item)}
+                      >
+                        <Text style={styles.btnControleText}>-</Text>
+                      </TouchableOpacity>
+                      
+                      <Text style={styles.quantidadeDisplay}>{item.quantidade}</Text>
+                      
+                      <TouchableOpacity 
+                        style={styles.btnControle}
+                        onPress={() => incrementarQuantidadeItem(item)}
+                      >
+                        <Text style={styles.btnControleText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <Text style={styles.itemTotal}>
+                      R$ {item.subtotal?.toFixed(2)}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.semItens}>Nenhum item adicionado à comanda</Text>
+              )}
+              
+              {comanda?.itens && comanda.itens.length > 0 && (
+                <View style={styles.totalGeralContainer}>
+                  <Text style={styles.totalGeralText}>
+                    Total Geral: R$ {comanda.total?.toFixed(2)}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Confirmação para Fechar Comanda */}
+      <Modal visible={fecharComandaModalVisible} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <View style={styles.confirmHeader}>
+              <Ionicons name="warning-outline" size={48} color="#ff9800" />
+              <Text style={styles.confirmTitle}>Fechar Comanda</Text>
+            </View>
+            
+            <Text style={styles.confirmMessage}>
+              Tem certeza que deseja fechar a comanda {comanda?.numeroComanda || comanda?.nomeComanda}?
+            </Text>
+            
+            <Text style={styles.confirmSubMessage}>
+              Total: R$ {comanda?.total?.toFixed(2)}
+            </Text>
+            
+            <View style={styles.confirmButtons}>
+              <TouchableOpacity 
+                style={[styles.confirmButton, styles.cancelButton]}
+                onPress={() => setFecharComandaModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.confirmButton, styles.confirmButtonPrimary]}
+                onPress={fecharComanda}
+              >
+                <Text style={styles.confirmButtonText}>Fechar Comanda</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -410,6 +602,42 @@ const styles = StyleSheet.create({
   btnFechar: {
     padding: 5,
   },
+  
+  // Novos estilos para botões de ação
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  closeComandaButton: {
+    backgroundColor: '#4CAF50',
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  
   modalBody: {
     flex: 1,
     padding: 15,
@@ -491,6 +719,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   produtoAdicionado: {
     backgroundColor: '#e8f5e8',
@@ -552,5 +785,124 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 20,
     fontSize: 16,
+  },
+  
+  // Estilos para modal de itens selecionados
+  itemSelecionadoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    marginBottom: 10,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemNome: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  itemPreco: {
+    fontSize: 14,
+    color: '#666',
+  },
+  itemControles: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 15,
+  },
+  itemTotal: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#27ae60',
+    minWidth: 80,
+    textAlign: 'right',
+  },
+  semItens: {
+    textAlign: 'center',
+    color: '#666',
+    marginTop: 40,
+    fontSize: 16,
+    fontStyle: 'italic',
+  },
+  totalGeralContainer: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#27ae60',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  totalGeralText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  
+  // Estilos para modal de confirmação
+  confirmModalContent: {
+    width: '85%',
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+  },
+  confirmHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 10,
+  },
+  confirmMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  confirmSubMessage: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#27ae60',
+    textAlign: 'center',
+    marginBottom: 25,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+  },
+  cancelButtonText: {
+    color: '#6c757d',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButtonPrimary: {
+    backgroundColor: '#dc3545',
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
