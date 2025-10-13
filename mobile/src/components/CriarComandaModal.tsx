@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
-import { employeeService } from '../services/api';
+import { employeeService, customerService } from '../services/api';
 
 interface Funcionario {
   _id: string;
@@ -57,12 +57,19 @@ export default function CriarComandaModal({ visible, onClose, onSubmit }: Props)
 
   const loadClientes = async () => {
     try {
-      // Simulando dados de clientes - você pode ajustar para sua API
+      const response = await customerService.getAll();
+      const clientesAtivos = response.data.filter((cliente: any) => cliente.ativo);
+      // Adicionar opção de cliente avulso
       setClientes([
-        { _id: 'avulso', nome: 'Cliente avulso' }
+        { _id: 'avulso', nome: 'Cliente avulso' },
+        ...clientesAtivos
       ]);
     } catch (error) {
       console.error('Erro ao carregar clientes:', error);
+      // Em caso de erro, usar apenas cliente avulso
+      setClientes([
+        { _id: 'avulso', nome: 'Cliente avulso' }
+      ]);
     }
   };
 

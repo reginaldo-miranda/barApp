@@ -12,35 +12,37 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useAuth } from '../src/contexts/AuthContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('admin@barapp.com');
   const [password, setPassword] = useState('123456');
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { login, loading } = useAuth();
 
   const handleLogin = async () => {
+    console.log('handleLogin chamado');
     if (!email.trim() || !password.trim()) {
       Alert.alert('Erro', 'Por favor, preencha todos os campos');
       return;
     }
 
-    setLoading(true);
     try {
-      // Simulação de login por enquanto
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('Tentando fazer login com:', { email, password });
+      const result = await login({ email, password });
+      console.log('Resultado do login:', result);
       
-      // Por enquanto, qualquer email/senha funciona
-      if (email && password) {
+      if (result.success) {
+        console.log('Login bem-sucedido, redirecionando...');
+        console.log('✅ Login realizado com sucesso');
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Erro de Login', 'Email ou senha incorretos');
+        console.log('Login falhou:', result.message);
+        Alert.alert('Erro de Login', result.message || 'Email ou senha incorretos');
       }
     } catch (error) {
       console.error('Erro no login:', error);
       Alert.alert('Erro de Login', 'Erro inesperado ao fazer login');
-    } finally {
-      setLoading(false);
     }
   };
 

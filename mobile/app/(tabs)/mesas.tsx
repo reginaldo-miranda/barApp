@@ -52,13 +52,14 @@ export default function MesasScreen() {
   const [showTooltipGerar, setShowTooltipGerar] = useState(false);
   
   // Refs para timers dos tooltips
-  const tooltipCriarTimer = useRef<NodeJS.Timeout | null>(null);
-  const tooltipGerarTimer = useRef<NodeJS.Timeout | null>(null);
+  const tooltipCriarTimer = useRef<number | null>(null);
+  const tooltipGerarTimer = useRef<number | null>(null);
 
   // Estados para modal de abertura de mesa
   const [abrirMesaModalVisible, setAbrirMesaModalVisible] = useState(false);
   const [mesaSelecionada, setMesaSelecionada] = useState<Mesa | null>(null);
   const [responsavelMesa, setResponsavelMesa] = useState('');
+  const [numeroClientes, setNumeroClientes] = useState('');
   
   // Estados para funcionários
   const [funcionarios, setFuncionarios] = useState<any[]>([]);
@@ -73,13 +74,13 @@ export default function MesasScreen() {
   const [observacoesMesa, setObservacoesMesa] = useState('');
 
   // Funções para gerenciar tooltips
-  const showTooltipWithDelay = (setTooltip: (value: boolean) => void, timerRef: React.MutableRefObject<NodeJS.Timeout | null>) => {
+  const showTooltipWithDelay = (setTooltip: (value: boolean) => void, timerRef: React.MutableRefObject<number | null>) => {
     timerRef.current = setTimeout(() => {
       setTooltip(true);
     }, 100); // 100ms delay - quase instantâneo
   };
 
-  const hideTooltip = (setTooltip: (show: boolean) => void, timerRef: React.MutableRefObject<NodeJS.Timeout | null>) => {
+  const hideTooltip = (setTooltip: (show: boolean) => void, timerRef: React.MutableRefObject<number | null>) => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -98,7 +99,7 @@ export default function MesasScreen() {
     observacoes: ''
   });
   
-  const { user } = useAuth();
+  const { user } = useAuth() as any;
 
   const loadMesas = async () => {
     try {
@@ -652,7 +653,7 @@ export default function MesasScreen() {
                 style={[styles.actionButton, styles.releaseButton]}
                 onPress={() => liberarReserva(item._id)}
               >
-                <Ionicons name="unlock" size={16} color="#fff" />
+                <Ionicons name="lock-open-outline" size={16} color="#fff" />
                 <Text style={styles.actionButtonText}>Liberar</Text>
               </TouchableOpacity>
             </View>

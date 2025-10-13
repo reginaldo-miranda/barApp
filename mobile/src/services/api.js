@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuração base da API
-const API_BASE_URL = 'http://192.168.0.176:4000/api';
+const API_BASE_URL = 'http://127.0.0.1:4000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -130,4 +130,14 @@ export const comandaService = {
   finalize: (id, formaPagamento) => api.put(`/sale/${id}/finalize`, { formaPagamento }),
   cancel: (id) => api.put(`/sale/${id}/cancel`),
   close: (id) => api.put(`/sale/${id}/finalize`, { formaPagamento: 'pendente' }),
+};
+
+export const userService = {
+  getAll: () => api.get('/user/list'),
+  getById: (id) => api.get(`/user/${id}`),
+  create: (data) => api.post('/user/create', data),
+  update: (id, data) => api.put(`/user/${id}`, data),
+  updatePermissions: (id, permissoes) => api.put(`/user/${id}/permissions`, { permissoes }),
+  updateStatus: (id, ativo) => api.put(`/user/${id}/status`, { ativo }),
+  delete: (id) => api.delete(`/user/${id}`),
 };

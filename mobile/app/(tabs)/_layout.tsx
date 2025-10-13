@@ -9,9 +9,7 @@ import { useAuth } from '../../src/contexts/AuthContext';
 
 export default function TabLayout() {
   const authContext = useAuth() as any;
-  const { user, isAuthenticated, loading } = authContext;
-
-  // Removido o redirecionamento daqui, pois agora é feito no index.tsx
+  const { user, isAuthenticated, loading, hasPermission, isAdmin } = authContext;
 
   if (loading) {
     return (
@@ -77,6 +75,51 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="time" size={24} color={color} />,
         }}
       />
+      
+      {/* Abas Administrativas - Visíveis apenas para usuários com permissões */}
+      {hasPermission('produtos') && (
+        <Tabs.Screen
+          name="admin-produtos"
+          options={{
+            title: 'Produtos',
+            headerTitle: 'Gerenciar Produtos',
+            tabBarIcon: ({ color }) => <Ionicons name="cube" size={24} color={color} />,
+          }}
+        />
+      )}
+      
+      {hasPermission('funcionarios') && (
+        <Tabs.Screen
+          name="admin-funcionarios"
+          options={{
+            title: 'Funcionários',
+            headerTitle: 'Gerenciar Funcionários',
+            tabBarIcon: ({ color }) => <Ionicons name="people" size={24} color={color} />,
+          }}
+        />
+      )}
+      
+      {hasPermission('clientes') && (
+        <Tabs.Screen
+          name="admin-clientes"
+          options={{
+            title: 'Clientes',
+            headerTitle: 'Gerenciar Clientes',
+            tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
+          }}
+        />
+      )}
+      
+      {isAdmin() && (
+        <Tabs.Screen
+          name="admin-configuracoes"
+          options={{
+            title: 'Config',
+            headerTitle: 'Configurações do Sistema',
+            tabBarIcon: ({ color }) => <Ionicons name="settings" size={24} color={color} />,
+          }}
+        />
+      )}
     </Tabs>
   );
 }

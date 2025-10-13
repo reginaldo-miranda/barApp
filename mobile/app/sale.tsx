@@ -6,8 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  TextInput,
   Modal,
+  TextInput,
+  ActivityIndicator,
+  Dimensions,
+  SafeAreaView,
+  Animated,
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,8 +19,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { productService, saleService, mesaService, comandaService } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useConfirmation } from '../src/contexts/ConfirmationContext';
-import ProductSelector from '../src/components/ProductSelector';
+import ProductSelectorModal from '../src/components/ProductSelectorModal';
 import { Sale, CartItem, PaymentMethod, Product } from '../src/types/index';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function SaleScreen() {
   const { tipo, mesaId, vendaId, viewMode } = useLocalSearchParams();
@@ -36,6 +42,8 @@ export default function SaleScreen() {
   const [isViewMode, setIsViewMode] = useState(false);
   const [nomeResponsavel, setNomeResponsavel] = useState('');
   const [mesa, setMesa] = useState<any>(null);
+  const [comanda, setComanda] = useState<any>(null);
+  const [cartAnimation] = useState(new Animated.Value(0));
 
   const categories = [
     { key: 'todos', label: 'Todos' },
@@ -103,6 +111,7 @@ export default function SaleScreen() {
       console.log('🔍 loadComandaSale response:', response.data);
       console.log('🔍 loadComandaSale itens:', response.data.itens);
       setSale(response.data);
+      setComanda(response.data);
       setCart(response.data.itens || []);
     } catch (error) {
       console.error('Erro ao carregar comanda:', error);
@@ -217,10 +226,27 @@ export default function SaleScreen() {
           setCart(prevCart => [...prevCart, response.data]);
         }
       }
+      
+      animateCart();
     } catch (error) {
       console.error('Erro ao adicionar item:', error);
       Alert.alert('Erro', 'Não foi possível adicionar o item');
     }
+  };
+
+  const animateCart = () => {
+    Animated.sequence([
+      Animated.timing(cartAnimation, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cartAnimation, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const openProductSelector = (product: any) => {
@@ -390,22 +416,42 @@ export default function SaleScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {isViewMode ? 
-            (nomeResponsavel ? 
-              `Mesa ${formatMesaNumero(mesa?.numero)} - ${nomeResponsavel} - ${formatDate()} - ${formatTime()} - ${sale?._id}` : 
-              `Produtos da Mesa ${formatMesaNumero(mesa?.numero)}`) : 
-           (tipo === 'mesa' ? 
-             (nomeResponsavel ? 
-               `Mesa ${formatMesaNumero(mesa?.numero)} - ${nomeResponsavel} - ${formatDate()} - ${formatTime()} - ${sale?._id}` : 
-               `Mesa ${formatMesaNumero(mesa?.numero)}`) : 
-             'Venda Avulsa')}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          {isViewMode ? 'Visualização dos produtos cadastrados' : `Venda #${sale?._id}`}
-        </Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>
+            {isViewMode ? 'Visualizar Venda' : 'Nova Venda'}
+          </Text>
+          {mesa && (
+            <Text style={styles.headerSubtitle}>
+              Mesa {formatMesaNumero(mesa.numero)} {nomeResponsavel && `- ${nomeResponsavel}`}
+            </Text>
+          )}
+          {sale && tipo === 'comanda' && comanda && (
+             <Text style={styles.headerSubtitle}>
+               Comanda: {comanda.nomeComanda || comanda.numeroComanda || 'Sem nome'}
+             </Text>
+           )}
+        </View>
+        
+        <View style={styles.headerRight}>
+          {!isViewMode && (
+            <TouchableOpacity 
+              style={styles.addProductButton}
+              onPress={() => setProductSelectorVisible(true)}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {!isViewMode && (
@@ -441,32 +487,63 @@ export default function SaleScreen() {
         </>
       )}
 
-      <View style={styles.content}>
+      <View style={[styles.content, screenWidth < 768 && styles.contentMobile]}>
         {!isViewMode && (
-          <View style={styles.productsSection}>
+          <View style={[styles.productsSection, screenWidth < 768 && styles.productsSectionMobile]}>
             <FlatList
               data={filteredProducts}
               renderItem={renderProduct}
               keyExtractor={(item) => item._id}
-              numColumns={2}
+              numColumns={screenWidth < 768 ? 1 : 2}
               showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.productsList}
             />
           </View>
         )}
 
-        <View style={[styles.cartSection, isViewMode && styles.cartSectionFullWidth]}>
-          <View style={styles.cartHeader}>
-            <Text style={styles.cartTitle}>Carrinho ({cart.length})</Text>
+        <View style={[
+          styles.cartSection, 
+          isViewMode && styles.cartSectionFullWidth,
+          screenWidth < 768 && styles.cartSectionMobile
+        ]}>
+          <Animated.View 
+            style={[
+              styles.cartHeader,
+              {
+                transform: [{
+                  scale: cartAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.05],
+                  }),
+                }],
+              },
+            ]}
+          >
+            <View style={styles.cartHeaderLeft}>
+              <Text style={styles.cartTitle}>Carrinho</Text>
+              <Text style={styles.cartItemCount}>({cart.length} {cart.length === 1 ? 'item' : 'itens'})</Text>
+            </View>
             <Text style={styles.cartTotal}>R$ {total.toFixed(2)}</Text>
-          </View>
+          </Animated.View>
           
-          <FlatList
-            data={cart}
-            renderItem={renderCartItem}
-            keyExtractor={(item) => item._id}
-            style={styles.cartList}
-            showsVerticalScrollIndicator={false}
-          />
+          {cart.length === 0 ? (
+            <View style={styles.emptyCart}>
+              <Ionicons name="cart-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyCartText}>Carrinho vazio</Text>
+              <Text style={styles.emptyCartSubtext}>
+                {isViewMode ? 'Nenhum item nesta venda' : 'Adicione produtos para começar'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={cart}
+              renderItem={renderCartItem}
+              keyExtractor={(item) => item._id}
+              style={styles.cartList}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.cartListContent}
+            />
+          )}
           
           {!isViewMode && (
             <TouchableOpacity
@@ -534,13 +611,13 @@ export default function SaleScreen() {
         </View>
       </Modal>
 
-      <ProductSelector
+      <ProductSelectorModal
         visible={productSelectorVisible}
         onClose={handleCloseProductSelector}
         onProductSelect={handleProductSelect}
-        title={selectedProduct ? `Adicionar ${selectedProduct.nome}` : 'Adicionar produto'}
+        title="Adicionar Produto"
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -548,11 +625,41 @@ export default function SaleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   header: {
     backgroundColor: '#2196F3',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
+  addProductButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
@@ -604,9 +711,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
   },
+  contentMobile: {
+    flexDirection: 'column',
+  },
   productsSection: {
     flex: 2,
     padding: 16,
+  },
+  productsSectionMobile: {
+    flex: 1,
+    maxHeight: '50%',
+  },
+  productsList: {
+    paddingBottom: 16,
   },
   productCard: {
     backgroundColor: '#fff',
@@ -658,6 +775,12 @@ const styles = StyleSheet.create({
   cartSectionFullWidth: {
     borderLeftWidth: 0,
   },
+  cartSectionMobile: {
+    borderLeftWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    flex: 1,
+  },
   cartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -665,11 +788,42 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#ddd',
+    backgroundColor: '#f8f9fa',
+  },
+  cartHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cartTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  cartItemCount: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  emptyCart: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  emptyCartText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyCartSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  cartListContent: {
+    paddingBottom: 16,
   },
   cartTotal: {
     fontSize: 18,
